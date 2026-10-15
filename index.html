@@ -1,926 +1,671 @@
-```html
 <!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Schiffe Versenken - Online Multiplayer</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome für Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        navy: {
-                            900: '#0a1128',
-                            800: '#1c2541',
-                            700: '#273859',
-                            600: '#3a506b',
-                        },
-                        cyan: {
-                            glow: '#00f5d4',
-                            radar: '#00bbf9'
-                        }
-                    },
-                    fontFamily: {
-                        sans: ['Outfit', 'sans-serif'],
-                        mono: ['Share Tech Mono', 'monospace'],
-                    }
-                }
-            }
-        }
-    </script>
-
+    <title>Schiffe Versenken - Multiplayer</title>
+    <!-- PeerJS für die Online-Verbindung zwischen Handys -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body {
-            background-color: #0a1128;
-            color: #f1f5f9;
-            user-select: none;
-            -webkit-user-select: none;
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --accent: #10b981;
+            --danger: #ef4444;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
         }
 
-        /* Radar scan animation */
-        .radar-grid {
-            background-image: 
-                radial-gradient(rgba(0, 245, 212, 0.15) 1px, transparent 0),
-                linear-gradient(to right, rgba(0, 245, 212, 0.05) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(0, 245, 212, 0.05) 1px, transparent 1px);
-            background-size: 100% 100%, 10% 10%, 10% 10%;
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            margin-bottom: 10px;
+            text-align: center;
+            color: var(--primary);
+        }
+
+        .card {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            font-size: 1.2rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #0f172a;
+            color: white;
+            text-align: center;
+            letter-spacing: 4px;
+            margin-bottom: 15px;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+            margin-bottom: 10px;
+        }
+
+        button:active {
+            background-color: var(--primary-hover);
+        }
+
+        button.secondary {
+            background-color: #475569;
+        }
+
+        button.accent {
+            background-color: var(--accent);
+        }
+
+        .status-box {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 0.95rem;
+        }
+
+        /* Spielfelder Grid */
+        .board-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            width: 100%;
+            max-width: 450px;
+        }
+
+        .board-wrapper {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            padding: 10px;
+            border-radius: 10px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .board-title {
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+            font-weight: bold;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 25px repeat(10, 1fr);
+            grid-template-rows: 25px repeat(10, 1fr);
+            gap: 2px;
+            background: var(--border);
+            padding: 2px;
+            border-radius: 4px;
+            max-width: 320px;
+            margin: 0 auto;
         }
 
         .cell {
+            background-color: #0f172a;
             aspect-ratio: 1;
-            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.65rem;
+            cursor: pointer;
+            border-radius: 2px;
+            user-select: none;
         }
 
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0a1128;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #273859;
-            border-radius: 3px;
+        .header-cell {
+            background-color: transparent !important;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-weight: bold;
+            cursor: default !important;
         }
 
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 15px rgba(0, 245, 212, 0.4); }
-            50% { box-shadow: 0 0 25px rgba(0, 245, 212, 0.8); }
+        .ship {
+            background-color: #64748b;
         }
 
-        .glow-active {
-            animation: pulse-glow 2s infinite;
+        .hit {
+            background-color: var(--danger) !important;
+            color: white;
+        }
+
+        .miss {
+            background-color: #334155 !important;
+            color: var(--text-muted);
+        }
+
+        .log {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 0.85rem;
+            height: 70px;
+            overflow-y: auto;
+            width: 100%;
+            max-width: 450px;
+            margin-top: 15px;
+            text-align: left;
+            color: var(--text-muted);
+        }
+
+        .fleet-setup-bar {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            width: 100%;
+            max-width: 450px;
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col font-sans justify-between bg-navy-900 text-slate-100">
+<body>
 
-    <!-- Header / Navigation -->
-    <header class="border-b border-navy-700 bg-navy-800/80 backdrop-blur sticky top-0 z-50 p-4">
-        <div class="max-w-4xl mx-auto flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <i class="fa-solid fa-crosshairs text-cyan-glow text-2xl animate-spin" style="animation-duration: 12s;"></i>
-                <h1 class="text-xl md:text-2xl font-extrabold tracking-wider bg-gradient-to-r from-cyan-glow to-blue-400 bg-clip-text text-transparent">
-                    FLOTTENMANÖVER
-                </h1>
-            </div>
-            <div id="room-badge" class="hidden bg-navy-700 border border-cyan-glow/40 px-3 py-1 rounded-full text-xs font-mono flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>RAUM: <strong id="display-room-code" class="text-cyan-glow text-sm">----</strong></span>
-            </div>
+    <h1>Schiffe Versenken</h1>
+
+    <!-- ANSICHT 1: Menü -->
+    <div id="menu-screen" class="card">
+        <p style="margin-bottom: 15px; color: var(--text-muted);">Gib einen 4-stelligen Raumcode ein (z.B. 1234), um ein Spiel zu starten oder beizutreten.</p>
+        <input type="text" id="room-code-input" maxlength="6" placeholder="z.B. 4711">
+        <button id="create-btn" class="accent">Raum erstellen</button>
+        <button id="join-btn" class="secondary">Raum beitreten</button>
+        <div id="menu-status" class="status-box hidden" style="color: var(--danger); margin-top: 10px;"></div>
+    </div>
+
+    <!-- ANSICHT 2: Schiff-Platzierung -->
+    <div id="setup-screen" class="card hidden">
+        <h2>Flotte positionieren</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">Tippe auf das Spielfeld, um deine Schiffe zu setzen.</p>
+        <div class="board-wrapper">
+            <div class="board-title">Dein Hafen</div>
+            <div id="setup-grid" class="grid"></div>
         </div>
-    </header>
+        <div class="fleet-setup-bar">
+            <button id="rotate-btn" class="secondary" style="margin:0;">Richtung: Horizontal</button>
+            <button id="random-btn" style="margin:0;">Zufall</button>
+        </div>
+        <button id="start-game-btn" class="accent hidden" style="margin-top: 15px;">Bereit &amp; Starten</button>
+    </div>
 
-    <!-- Main Content Container -->
-    <main class="max-w-4xl w-full mx-auto p-4 flex-grow flex flex-col justify-center">
+    <!-- ANSICHT 3: Aktives Spiel -->
+    <div id="game-screen" class="hidden" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+        <div id="turn-indicator" class="card" style="padding: 10px; margin-bottom: 10px; font-weight: bold; font-size: 1rem;">
+            Warte auf Mitspieler...
+        </div>
 
-        <!-- LOBBY SCREEN -->
-        <div id="screen-lobby" class="flex flex-col items-center justify-center py-8">
-            <div class="bg-navy-800 p-6 md:p-8 rounded-2xl border border-navy-600 shadow-2xl max-w-md w-full relative overflow-hidden">
-                <div class="absolute -right-10 -bottom-10 opacity-10">
-                    <i class="fa-solid fa-ship text-9xl text-cyan-glow"></i>
-                </div>
-
-                <h2 class="text-2xl font-bold mb-6 text-center text-white">Online Gefecht starten</h2>
-                
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Dein Kommandanten-Name</label>
-                        <input type="text" id="input-player-name" maxlength="12" placeholder="z.B. Admiral_X" 
-                            class="w-full bg-navy-900 border border-navy-600 rounded-xl px-4 py-3 text-cyan-glow font-mono focus:outline-none focus:border-cyan-glow">
-                    </div>
-
-                    <div class="pt-2">
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">4-Stelliger Raum-Code</label>
-                        <input type="text" id="input-room-code" maxlength="4" placeholder="z.B. 4096" 
-                            class="w-full bg-navy-900 border border-navy-600 rounded-xl px-4 py-3 text-cyan-glow font-mono text-center text-2xl tracking-widest uppercase focus:outline-none focus:border-cyan-glow">
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3 pt-4">
-                        <button id="btn-create-game" class="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2">
-                            <i class="fa-solid fa-plus"></i> Erstellen
-                        </button>
-                        <button id="btn-join-game" class="bg-navy-700 hover:bg-navy-600 text-cyan-glow border border-cyan-glow/30 font-bold py-3 px-4 rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2">
-                            <i class="fa-solid fa-right-to-bracket"></i> Beitreten
-                        </button>
-                    </div>
-                </div>
-
-                <div id="lobby-status" class="mt-4 text-center text-sm font-mono text-amber-400 min-h-[1.5rem]"></div>
+        <div class="board-container">
+            <div class="board-wrapper">
+                <div class="board-title">Gegnerisches Gewässer</div>
+                <div id="enemy-grid" class="grid"></div>
+            </div>
+            
+            <div class="board-wrapper">
+                <div class="board-title">Deine Flotte</div>
+                <div id="player-grid" class="grid"></div>
             </div>
         </div>
 
-        <!-- WAITING SCREEN -->
-        <div id="screen-waiting" class="hidden flex-col items-center justify-center py-12 text-center">
-            <div class="bg-navy-800 p-8 rounded-2xl border border-navy-600 max-w-md w-full flex flex-col items-center">
-                <i class="fa-solid fa-satellite-dish text-5xl text-cyan-glow animate-bounce mb-4"></i>
-                <h2 class="text-2xl font-bold mb-2">Warte auf Gegenspieler...</h2>
-                <p class="text-slate-400 text-sm mb-6">Teile diesen Code mit deinem Mitspieler:</p>
-                <div class="bg-navy-900 border-2 border-dashed border-cyan-glow px-6 py-3 rounded-xl font-mono text-4xl text-cyan-glow font-bold tracking-widest mb-6">
-                    <span id="share-room-code">----</span>
-                </div>
-                <div class="flex items-center gap-2 text-xs font-mono text-slate-400">
-                    <i class="fa-solid fa-circle-notch animate-spin text-cyan-glow"></i>
-                    Verbindung wird hergestellt...
-                </div>
-            </div>
-        </div>
+        <div id="game-log" class="log">Spiel gestartet. Viel Erfolg!</div>
+    </div>
 
-        <!-- PLACEMENT SCREEN -->
-        <div id="screen-placement" class="hidden flex-col items-center">
-            <div class="w-full flex flex-col md:flex-row gap-6 items-center justify-between mb-4">
-                <div>
-                    <h2 class="text-xl font-bold text-cyan-glow flex items-center gap-2">
-                        <i class="fa-solid fa-anchor"></i> Flotte Stationieren
-                    </h2>
-                    <p class="text-xs text-slate-400">Platziere deine Schiffe auf dem Koordinatenfeld.</p>
-                </div>
-                <div class="flex gap-2">
-                    <button id="btn-rotate-ship" class="bg-navy-700 hover:bg-navy-600 border border-navy-600 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2">
-                        <i class="fa-solid fa-rotate"></i> Drehen: <span id="current-orientation" class="text-cyan-glow">Horiz.</span>
-                    </button>
-                    <button id="btn-random-ships" class="bg-navy-700 hover:bg-navy-600 border border-navy-600 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2">
-                        <i class="fa-solid fa-shuffle text-cyan-glow"></i> Zufall
-                    </button>
-                </div>
-            </div>
+    <script>
+        const letters = ['A','B','C','D','E','F','G','H','I','J'];
+        let peer = null, conn = null;
+        let isHost = false;
+        let gameState = 'menu'; // menu, setup, waiting, battle, over
 
-            <!-- Available Ships Bar -->
-            <div id="ships-inventory" class="w-full bg-navy-800 p-3 rounded-xl border border-navy-700 mb-4 flex flex-wrap gap-3 justify-center items-center text-xs">
-                <!-- Dynamisch befüllt -->
-            </div>
+        // Schiffsgrößen: 1x 4er, 2x 3er, 3x 2er, 4x 1er
+        const shipSizes = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1];
+        let currentShipIndex = 0;
+        let horizontal = true;
+        let playerBoard = Array(10).fill(null).map(() => Array(10).fill(0));
+        let enemyShots = Array(10).fill(null).map(() => Array(10).fill(0)); // 0: leer, 1: schuss, 2: treffer
+        let myShots = Array(10).fill(null).map(() => Array(10).fill(0));    // 0: leer, 1: wasser, 2: treffer
+        let myTurn = false;
+        let gameActive = false;
+        let opponentReady = false;
+        let iAmReady = false;
 
-            <!-- Placement Board -->
-            <div class="relative bg-navy-800 p-3 rounded-2xl border border-navy-600 shadow-xl radar-grid">
-                <div id="placement-board" class="grid grid-cols-11 gap-1 max-w-[360px] sm:max-w-[420px] mx-auto">
-                    <!-- Board cells JS generated -->
-                </div>
-            </div>
-
-            <button id="btn-ready" disabled class="mt-6 w-full max-w-xs bg-slate-700 text-slate-400 font-bold py-3 px-6 rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2 cursor-not-allowed">
-                <i class="fa-solid fa-check"></i> Bereitschaft Melden
-            </button>
-        </div>
-
-        <!-- BATTLE SCREEN -->
-        <div id="screen-battle" class="hidden flex-col items-center">
-            <!-- Turn Status Indicator -->
-            <div id="turn-banner" class="w-full mb-6 py-3 px-4 rounded-xl text-center font-bold text-lg border transition-all duration-300 flex items-center justify-center gap-3">
-                <i id="turn-icon" class="fa-solid fa-circle"></i>
-                <span id="turn-text">Lade Gefechtsstatus...</span>
-            </div>
-
-            <div class="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                
-                <!-- Target Board (Enemy) -->
-                <div class="flex flex-col items-center bg-navy-800 p-4 rounded-2xl border border-navy-600 w-full shadow-xl">
-                    <h3 class="text-sm font-bold text-rose-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <i class="fa-solid fa-crosshairs"></i> Zielgebiet (Feind)
-                    </h3>
-                    <div class="radar-grid p-2 rounded-xl bg-navy-900 border border-navy-700 w-full flex justify-center">
-                        <div id="enemy-board" class="grid grid-cols-11 gap-1 w-full max-w-[340px]">
-                            <!-- Cells JS generated -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Own Fleet Board -->
-                <div class="flex flex-col items-center bg-navy-800 p-4 rounded-2xl border border-navy-600 w-full shadow-xl">
-                    <h3 class="text-sm font-bold text-cyan-glow uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <i class="fa-solid fa-shield-halved"></i> Eigene Flotte
-                    </h3>
-                    <div class="radar-grid p-2 rounded-xl bg-navy-900 border border-navy-700 w-full flex justify-center">
-                        <div id="own-board" class="grid grid-cols-11 gap-1 w-full max-w-[340px]">
-                            <!-- Cells JS generated -->
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- Combat Log -->
-            <div class="w-full mt-6 bg-navy-800/80 border border-navy-700 rounded-xl p-3">
-                <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <i class="fa-solid fa-list-ul"></i> Gefechts-Log
-                </h4>
-                <div id="combat-log" class="h-20 overflow-y-auto font-mono text-xs space-y-1 text-slate-300">
-                    <p class="text-slate-500">Gefecht gestartet. Erwarte erste Befehle...</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- GAME OVER MODAL -->
-        <div id="modal-gameover" class="hidden fixed inset-0 bg-navy-900/90 backdrop-blur z-50 flex items-center justify-center p-4">
-            <div class="bg-navy-800 border border-navy-600 p-6 md:p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl">
-                <div id="gameover-icon-container" class="mb-4">
-                    <!-- Icon JS -->
-                </div>
-                <h2 id="gameover-title" class="text-3xl font-black mb-2">SIEG!</h2>
-                <p id="gameover-desc" class="text-slate-300 text-sm mb-6">Du hast alle feindlichen Schiffe versenkt.</p>
-                <button id="btn-restart" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition">
-                    Neues Spiel
-                </button>
-            </div>
-        </div>
-
-    </main>
-
-    <!-- Footer -->
-    <footer class="border-t border-navy-800 py-3 text-center text-xs text-slate-500 font-mono">
-        Schiffe Versenken Web-App &bull; Realtime Multiplayer
-    </footer>
-
-    <!-- Firebase Imports & Logic -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Firebase Initialization
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'battleship-default';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' 
-            ? JSON.parse(__firebase_config) 
-            : {
-                apiKey: "AIzaSyDummyKeyForFallbackPurposeOnly",
-                authDomain: "demo-app.firebaseapp.com",
-                projectId: "demo-app",
-                storageBucket: "demo-app.appspot.com",
-                messagingSenderId: "00000000000",
-                appId: "1:00000000000:web:000000000000"
-            };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        // Global Game State Variables
-        let currentUser = null;
-        let roomCode = "";
-        let playerRole = ""; // "p1" oder "p2"
-        let roomUnsubscribe = null;
-
-        // Board & Ships Specs
-        const BOARD_SIZE = 10;
-        const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-        const SHIPS_CONFIG = [
-            { id: 'battleship', name: 'Schlachtschiff', size: 4, count: 1 },
-            { id: 'cruiser', name: 'Kreuzer', size: 3, count: 2 },
-            { id: 'destroyer', name: 'Zerstörer', size: 2, count: 3 },
-            { id: 'submarine', name: 'U-Boot', size: 1, count: 4 }
-        ];
-
-        // Player's Local Fleet Placement State
-        let selectedShipToPlace = null;
-        let orientation = 'H'; // 'H' oder 'V'
-        let placedShips = []; // [{id, name, size, coordinates: ['A1', 'A2']}]
-        let shipCounts = { battleship: 1, cruiser: 2, destroyer: 3, submarine: 4 };
-
-        // Authentication Setup
-        async function setupAuth() {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    const credentials = await signInWithCustomToken(auth, __initial_auth_token);
-                    currentUser = credentials.user;
-                } else {
-                    const credentials = await signInAnonymously(auth);
-                    currentUser = credentials.user;
-                }
-            } catch (err) {
-                console.error("Auth error:", err);
-            }
-        }
-        setupAuth();
-
-        // UI DOM Elements
-        const screens = {
-            lobby: document.getElementById('screen-lobby'),
-            waiting: document.getElementById('screen-waiting'),
-            placement: document.getElementById('screen-placement'),
-            battle: document.getElementById('screen-battle')
+        const ui = {
+            menu: document.getElementById('menu-screen'),
+            setup: document.getElementById('setup-screen'),
+            game: document.getElementById('game-screen'),
+            roomInput: document.getElementById('room-code-input'),
+            createBtn: document.getElementById('create-btn'),
+            joinBtn: document.getElementById('join-btn'),
+            menuStatus: document.getElementById('menu-status'),
+            setupGrid: document.getElementById('setup-grid'),
+            playerGrid: document.getElementById('player-grid'),
+            enemyGrid: document.getElementById('enemy-grid'),
+            rotateBtn: document.getElementById('rotate-btn'),
+            randomBtn: document.getElementById('random-btn'),
+            startBtn: document.getElementById('start-game-btn'),
+            turnIndicator: document.getElementById('turn-indicator'),
+            gameLog: document.getElementById('game-log')
         };
 
-        const roomBadge = document.getElementById('room-badge');
-        const displayRoomCode = document.getElementById('display-room-code');
-        const lobbyStatus = document.getElementById('lobby-status');
-
-        function showScreen(screenName) {
-            Object.keys(screens).forEach(key => {
-                screens[key].classList.add('hidden');
-                screens[key].classList.remove('flex');
-            });
-            screens[screenName].classList.remove('hidden');
-            screens[screenName].classList.add('flex');
+        function showStatus(text) {
+            ui.menuStatus.textContent = text;
+            ui.menuStatus.classList.remove('hidden');
         }
 
-        // Room Path Helper
-        function getRoomDocRef(code) {
-            return doc(db, 'artifacts', appId, 'public', 'data', 'battleship_rooms', code.toUpperCase());
-        }
+        // --- HILFSFUNKTIONEN GRIDS ---
+        function createGridElements(container, isEnemy) {
+            container.innerHTML = '';
+            // Ecke oben links
+            const corner = document.createElement('div');
+            corner.className = 'cell header-cell';
+            container.appendChild(corner);
 
-        // --- LOBBY ACTIONS ---
-
-        document.getElementById('btn-create-game').addEventListener('click', async () => {
-            const name = document.getElementById('input-player-name').value.trim() || 'Admiral';
-            const code = document.getElementById('input-room-code').value.trim().toUpperCase();
-
-            if (code.length !== 4) {
-                lobbyStatus.textContent = "Bitte einen 4-stelligen Raum-Code eingeben!";
-                return;
+            // Spalten 1-10
+            for(let c=1; c<=10; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell header-cell';
+                cell.textContent = c;
+                container.appendChild(cell);
             }
 
-            if (!currentUser) await setupAuth();
+            for(let r=0; r<10; r++) {
+                // Zeilen A-J
+                const rowHeader = document.createElement('div');
+                rowHeader.className = 'cell header-cell';
+                rowHeader.textContent = letters[r];
+                container.appendChild(rowHeader);
 
-            roomCode = code;
-            playerRole = 'p1';
-
-            const roomRef = getRoomDocRef(roomCode);
-            try {
-                const docSnap = await getDoc(roomRef);
-                if (docSnap.exists() && docSnap.data().status !== 'finished') {
-                    lobbyStatus.textContent = "Raum existiert bereits! Wähle 'Beitreten'.";
-                    return;
-                }
-
-                const initialRoomData = {
-                    p1: { id: currentUser.uid, name: name, ready: false, ships: [], hitsReceived: [] },
-                    p2: null,
-                    turn: 'p1',
-                    status: 'waiting', // waiting, placement, playing, finished
-                    winner: null,
-                    shots: {}, // { 'p1': ['A1', 'B2'], 'p2': [] }
-                    logs: ["Raum erstellt. Warte auf Mitspieler..."]
-                };
-
-                await setDoc(roomRef, initialRoomData);
-                startRoomListener(roomCode);
-                
-                document.getElementById('share-room-code').textContent = roomCode;
-                displayRoomCode.textContent = roomCode;
-                roomBadge.classList.remove('hidden');
-                showScreen('waiting');
-
-            } catch (e) {
-                lobbyStatus.textContent = "Fehler beim Erstellen des Raums.";
-                console.error(e);
-            }
-        });
-
-        document.getElementById('btn-join-game').addEventListener('click', async () => {
-            const name = document.getElementById('input-player-name').value.trim() || 'Kapitän';
-            const code = document.getElementById('input-room-code').value.trim().toUpperCase();
-
-            if (code.length !== 4) {
-                lobbyStatus.textContent = "Bitte einen 4-stelligen Raum-Code eingeben!";
-                return;
-            }
-
-            if (!currentUser) await setupAuth();
-
-            roomCode = code;
-            playerRole = 'p2';
-
-            const roomRef = getRoomDocRef(roomCode);
-            try {
-                const docSnap = await getDoc(roomRef);
-                if (!docSnap.exists()) {
-                    lobbyStatus.textContent = "Raum nicht gefunden!";
-                    return;
-                }
-
-                const data = docSnap.data();
-                if (data.p2 && data.p2.id !== currentUser.uid) {
-                    lobbyStatus.textContent = "Raum ist bereits voll!";
-                    return;
-                }
-
-                await updateDoc(roomRef, {
-                    p2: { id: currentUser.uid, name: name, ready: false, ships: [], hitsReceived: [] },
-                    status: 'placement',
-                    logs: [...(data.logs || []), `${name} ist dem Spiel beigetreten.`]
-                });
-
-                displayRoomCode.textContent = roomCode;
-                roomBadge.classList.remove('hidden');
-                startRoomListener(roomCode);
-
-            } catch (e) {
-                lobbyStatus.textContent = "Fehler beim Beitreten.";
-                console.error(e);
-            }
-        });
-
-        // --- REALTIME ROOM SYNC ---
-
-        function startRoomListener(code) {
-            if (roomUnsubscribe) roomUnsubscribe();
-
-            const roomRef = getRoomDocRef(code);
-            roomUnsubscribe = onSnapshot(roomRef, (snapshot) => {
-                if (!snapshot.exists()) return;
-                const data = snapshot.data();
-
-                // 1. Waiting for P2
-                if (data.status === 'waiting') {
-                    showScreen('waiting');
-                }
-
-                // 2. Ships Placement Phase
-                if (data.status === 'placement') {
-                    if (screens.placement.classList.contains('hidden')) {
-                        initPlacementBoard();
-                        showScreen('placement');
-                    }
-                }
-
-                // 3. Battle Phase
-                if (data.status === 'playing') {
-                    if (screens.battle.classList.contains('hidden')) {
-                        initBattleBoards();
-                        showScreen('battle');
-                    }
-                    updateBattleUI(data);
-                }
-
-                // 4. Game Over
-                if (data.status === 'finished') {
-                    updateBattleUI(data);
-                    showGameOverModal(data.winner);
-                }
-
-            }, (error) => {
-                console.error("Firestore Listener Error:", error);
-            });
-        }
-
-        // --- SHIP PLACEMENT LOGIC ---
-
-        function initPlacementBoard() {
-            const boardEl = document.getElementById('placement-board');
-            boardEl.innerHTML = '';
-            
-            // Header Row (Numbers 1-10)
-            boardEl.appendChild(createLabelCell(''));
-            for (let i = 1; i <= BOARD_SIZE; i++) {
-                boardEl.appendChild(createLabelCell(i.toString()));
-            }
-
-            // Grid Rows (A-J)
-            for (let r = 0; r < BOARD_SIZE; r++) {
-                boardEl.appendChild(createLabelCell(LETTERS[r]));
-                for (let c = 1; c <= BOARD_SIZE; c++) {
-                    const coord = `${LETTERS[r]}${c}`;
+                for(let c=0; c<10; c++) {
                     const cell = document.createElement('div');
-                    cell.className = 'cell bg-navy-900 border border-navy-700/60 rounded cursor-pointer hover:border-cyan-glow transition flex items-center justify-center';
-                    cell.dataset.coord = coord;
-
-                    cell.addEventListener('mouseenter', () => handleCellHover(coord));
-                    cell.addEventListener('mouseleave', clearHoverStates);
-                    cell.addEventListener('click', () => handleCellClick(coord));
-
-                    boardEl.appendChild(cell);
-                }
-            }
-
-            renderInventory();
-        }
-
-        function createLabelCell(text) {
-            const label = document.createElement('div');
-            label.className = 'cell font-mono text-xs text-slate-500 font-bold flex items-center justify-center';
-            label.textContent = text;
-            return label;
-        }
-
-        function renderInventory() {
-            const invEl = document.getElementById('ships-inventory');
-            invEl.innerHTML = '';
-
-            SHIPS_CONFIG.forEach(config => {
-                const remaining = shipCounts[config.id];
-                const item = document.createElement('button');
-                const isSelected = selectedShipToPlace && selectedShipToPlace.id === config.id;
-                
-                item.className = `px-3 py-2 rounded-lg border font-semibold flex items-center gap-2 transition ${
-                    remaining === 0 
-                        ? 'opacity-40 border-navy-700 bg-navy-900 cursor-not-allowed' 
-                        : isSelected 
-                            ? 'border-cyan-glow bg-cyan- glow/10 text-cyan-glow ring-2 ring-cyan-glow/30' 
-                            : 'border-navy-600 bg-navy-700 hover:border-slate-400 text-slate-200'
-                }`;
-
-                item.innerHTML = `
-                    <span>${config.name} (${config.size})</span>
-                    <span class="bg-navy-900 px-2 py-0.5 rounded text-xs font-mono text-cyan-glow">${remaining}x</span>
-                `;
-
-                if (remaining > 0) {
-                    item.onclick = () => {
-                        selectedShipToPlace = config;
-                        renderInventory();
-                    };
-                }
-
-                invEl.appendChild(item);
-            });
-
-            // Auto-select first available ship if none selected
-            if (!selectedShipToPlace || shipCounts[selectedShipToPlace.id] === 0) {
-                const firstAvailable = SHIPS_CONFIG.find(c => shipCounts[c.id] > 0);
-                selectedShipToPlace = firstAvailable || null;
-            }
-
-            // Check if all placed
-            const allPlaced = Object.values(shipCounts).every(cnt => cnt === 0);
-            const btnReady = document.getElementById('btn-ready');
-            btnReady.disabled = !allPlaced;
-            if (allPlaced) {
-                btnReady.className = "mt-6 w-full max-w-xs bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2 glow-active cursor-pointer";
-            } else {
-                btnReady.className = "mt-6 w-full max-w-xs bg-slate-700 text-slate-500 font-bold py-3 px-6 rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2 cursor-not-allowed";
-            }
-        }
-
-        document.getElementById('btn-rotate-ship').addEventListener('click', () => {
-            orientation = orientation === 'H' ? 'V' : 'H';
-            document.getElementById('current-orientation').textContent = orientation === 'H' ? 'Horiz.' : 'Vertik.';
-        });
-
-        function getShipCoordinates(startCoord, size, orient) {
-            const rowStr = startCoord[0];
-            const col = parseInt(startCoord.slice(1));
-            const rowIdx = LETTERS.indexOf(rowStr);
-            const coords = [];
-
-            for (let i = 0; i < size; i++) {
-                if (orient === 'H') {
-                    if (col + i > BOARD_SIZE) return null; // Overflows board
-                    coords.push(`${rowStr}${col + i}`);
-                } else {
-                    if (rowIdx + i >= BOARD_SIZE) return null; // Overflows board
-                    coords.push(`${LETTERS[rowIdx + i]}${col}`);
-                }
-            }
-            return coords;
-        }
-
-        function handleCellHover(coord) {
-            clearHoverStates();
-            if (!selectedShipToPlace) return;
-
-            const coords = getShipCoordinates(coord, selectedShipToPlace.size, orientation);
-            const isValid = coords && isValidPlacement(coords);
-
-            if (coords) {
-                coords.forEach(c => {
-                    const el = document.querySelector(`#placement-board [data-coord="${c}"]`);
-                    if (el) {
-                        el.classList.add(isValid ? 'bg-cyan-glow/30' : 'bg-rose-500/40');
+                    cell.className = 'cell';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    if(isEnemy) {
+                        cell.addEventListener('click', () => handleEnemyGridClick(r, c));
+                    } else {
+                        cell.addEventListener('click', () => handleSetupGridClick(r, c));
                     }
-                });
-            }
-        }
-
-        function clearHoverStates() {
-            document.querySelectorAll('#placement-board .cell').forEach(cell => {
-                cell.classList.remove('bg-cyan-glow/30', 'bg-rose-500/40');
-            });
-        }
-
-        function isValidPlacement(coords) {
-            // Check collision with already placed ships
-            return coords.every(c => !placedShips.some(s => s.coordinates.includes(c)));
-        }
-
-        function handleCellClick(coord) {
-            if (!selectedShipToPlace) return;
-
-            const coords = getShipCoordinates(coord, selectedShipToPlace.size, orientation);
-            if (coords && isValidPlacement(coords)) {
-                placedShips.push({
-                    id: selectedShipToPlace.id,
-                    name: selectedShipToPlace.name,
-                    size: selectedShipToPlace.size,
-                    coordinates: coords
-                });
-
-                shipCounts[selectedShipToPlace.id]--;
-                renderPlacedShips();
-                renderInventory();
-            }
-        }
-
-        function renderPlacedShips() {
-            // Clear ship visuals
-            document.querySelectorAll('#placement-board .cell').forEach(cell => {
-                if (cell.dataset.coord) {
-                    cell.innerHTML = '';
-                    cell.classList.remove('bg-cyan-600', 'border-cyan-400');
-                    cell.classList.add('bg-navy-900');
+                    container.appendChild(cell);
                 }
-            });
-
-            // Render current placed ships
-            placedShips.forEach(ship => {
-                ship.coordinates.forEach(coord => {
-                    const cell = document.querySelector(`#placement-board [data-coord="${coord}"]`);
-                    if (cell) {
-                        cell.classList.remove('bg-navy-900');
-                        cell.classList.add('bg-cyan-600', 'border-cyan-400');
-                    }
-                });
-            });
+            }
         }
 
-        // Randomize placement
-        document.getElementById('btn-random-ships').addEventListener('click', () => {
-            placedShips = [];
-            shipCounts = { battleship: 1, cruiser: 2, destroyer: 3, submarine: 4 };
+        // --- SETUP LOGIK ---
+        function initSetup() {
+            playerBoard = Array(10).fill(null).map(() => Array(10).fill(0));
+            currentShipIndex = 0;
+            iAmReady = false;
+            ui.startBtn.classList.add('hidden');
+            placeShipsRandomly();
+            drawSetupBoard();
+        }
 
-            SHIPS_CONFIG.forEach(config => {
-                while (shipCounts[config.id] > 0) {
-                    let placed = false;
-                    let attempts = 0;
-                    while (!placed && attempts < 100) {
-                        attempts++;
-                        const r = LETTERS[Math.floor(Math.random() * BOARD_SIZE)];
-                        const c = Math.floor(Math.random() * BOARD_SIZE) + 1;
-                        const randOrient = Math.random() > 0.5 ? 'H' : 'V';
-                        const coords = getShipCoordinates(`${r}${c}`, config.size, randOrient);
-
-                        if (coords && isValidPlacement(coords)) {
-                            placedShips.push({
-                                id: config.id,
-                                name: config.name,
-                                size: config.size,
-                                coordinates: coords
-                            });
-                            shipCounts[config.id]--;
-                            placed = true;
+        function drawSetupBoard() {
+            const cells = ui.setupGrid.children;
+            for(let r=0; r<10; r++) {
+                for(let c=0; c<10; c++) {
+                    const idx = 11 + r * 11 + c; // Offset durch Header
+                    const cell = cells[idx];
+                    if(cell) {
+                        cell.className = 'cell';
+                        if(playerBoard[r][c] === 1) {
+                            cell.classList.add('ship');
                         }
                     }
                 }
-            });
-
-            renderPlacedShips();
-            renderInventory();
-        });
-
-        // Ready Button Event
-        document.getElementById('btn-ready').addEventListener('click', async () => {
-            const roomRef = getRoomDocRef(roomCode);
-            const docSnap = await getDoc(roomRef);
-            if (!docSnap.exists()) return;
-
-            const data = docSnap.data();
-            const myData = data[playerRole] || {};
-            myData.ready = true;
-            myData.ships = placedShips;
-
-            const updateObj = {};
-            updateObj[playerRole] = myData;
-
-            // Check if both are ready -> start game
-            const otherRole = playerRole === 'p1' ? 'p2' : 'p1';
-            if (data[otherRole] && data[otherRole].ready) {
-                updateObj.status = 'playing';
-                updateObj.logs = [...(data.logs || []), "Beide Kommandanten sind bereit! Feuer frei!"];
-            } else {
-                updateObj.logs = [...(data.logs || []), `${myData.name} ist gefechtsbereit.`];
             }
-
-            await updateDoc(roomRef, updateObj);
-            document.getElementById('btn-ready').disabled = true;
-            document.getElementById('btn-ready').textContent = "Warte auf Gegner...";
-        });
-
-        // --- BATTLE LOGIC ---
-
-        function initBattleBoards() {
-            const ownBoardEl = document.getElementById('own-board');
-            const enemyBoardEl = document.getElementById('enemy-board');
-
-            ownBoardEl.innerHTML = '';
-            enemyBoardEl.innerHTML = '';
-
-            // Generate Labels & Grid Cells
-            [ownBoardEl, enemyBoardEl].forEach(board => {
-                board.appendChild(createLabelCell(''));
-                for (let i = 1; i <= BOARD_SIZE; i++) {
-                    board.appendChild(createLabelCell(i.toString()));
-                }
-            });
-
-            for (let r = 0; r < BOARD_SIZE; r++) {
-                // Own board
-                ownBoardEl.appendChild(createLabelCell(LETTERS[r]));
-                for (let c = 1; c <= BOARD_SIZE; c++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'cell bg-navy-900 border border-navy-700/60 rounded flex items-center justify-center text-xs';
-                    cell.dataset.coord = `${LETTERS[r]}${c}`;
-                    ownBoardEl.appendChild(cell);
-                }
-
-                // Enemy target board
-                enemyBoardEl.appendChild(createLabelCell(LETTERS[r]));
-                for (let c = 1; c <= BOARD_SIZE; c++) {
-                    const coord = `${LETTERS[r]}${c}`;
-                    const cell = document.createElement('div');
-                    cell.className = 'cell bg-navy-900 border border-navy-700/60 rounded cursor-pointer hover:border-rose-400 transition flex items-center justify-center text-xs';
-                    cell.dataset.coord = coord;
-                    cell.onclick = () => handleFireShot(coord);
-                    enemyBoardEl.appendChild(cell);
-                }
-            }
-
-            // Draw own ships initially
-            placedShips.forEach(ship => {
-                ship.coordinates.forEach(coord => {
-                    const cell = ownBoardEl.querySelector(`[data-coord="${coord}"]`);
-                    if (cell) {
-                        cell.classList.add('bg-cyan-700/80', 'border-cyan-500');
-                    }
-                });
-            });
         }
 
-        async function handleFireShot(coord) {
-            const roomRef = getRoomDocRef(roomCode);
-            const docSnap = await getDoc(roomRef);
-            if (!docSnap.exists()) return;
-
-            const data = docSnap.data();
-
-            // Check if it's player's turn
-            if (data.turn !== playerRole) return;
-            if (data.status !== 'playing') return;
-
-            const enemyRole = playerRole === 'p1' ? 'p2' : 'p1';
-            const previousShots = data.shots?.[playerRole] || [];
-
-            // Prevent shooting same cell twice
-            if (previousShots.includes(coord)) return;
-
-            const updatedShots = [...previousShots, coord];
-            const enemyShips = data[enemyRole].ships || [];
-
-            // Check hit or miss
-            let isHit = false;
-            let hitShipName = null;
-            let isSunk = false;
-
-            enemyShips.forEach(ship => {
-                if (ship.coordinates.includes(coord)) {
-                    isHit = true;
-                    hitShipName = ship.name;
-
-                    // Check if ship is completely sunk
-                    const allShipHits = ship.coordinates.every(c => updatedShots.includes(c));
-                    if (allShipHits) isSunk = true;
-                }
-            });
-
-            // Update Firestore with shot results
-            const updateObj = {};
-            updateObj[`shots.${playerRole}`] = updatedShots;
-
-            let logMsg = `${data[playerRole].name} schießt auf ${coord}: ${isHit ? '💥 TREFFER!' : '🌊 Wasser'}`;
-            if (isSunk) logMsg += ` (${hitShipName} VERSENKT!)`;
-
-            updateObj.logs = [...(data.logs || []), logMsg];
-
-            // Turn switches only on miss or stays on hit (Standard Battleship Rules: Hit = Shoot again)
-            if (!isHit) {
-                updateObj.turn = enemyRole;
-            }
-
-            // Check Win Condition: All enemy ships sunk
-            const allEnemyCoords = enemyShips.flatMap(s => s.coordinates);
-            const hasWon = allEnemyCoords.every(c => updatedShots.includes(c));
-
-            if (hasWon) {
-                updateObj.status = 'finished';
-                updateObj.winner = playerRole;
-                updateObj.logs.push(`🏆 ${data[playerRole].name} HAT DAS GEFECHT GEWONNEN!`);
-            }
-
-            await updateDoc(roomRef, updateObj);
-        }
-
-        function updateBattleUI(data) {
-            const isMyTurn = data.turn === playerRole;
-            const enemyRole = playerRole === 'p1' ? 'p2' : 'p1';
-
-            // 1. Update Turn Banner
-            const turnBanner = document.getElementById('turn-banner');
-            const turnText = document.getElementById('turn-text');
-            const turnIcon = document.getElementById('turn-icon');
-
-            if (data.status === 'finished') {
-                turnBanner.className = "w-full mb-6 py-3 px-4 rounded-xl text-center font-bold text-lg bg-navy-800 border-navy-600 text-slate-300";
-                turnText.textContent = "Gefecht Beendet";
-                turnIcon.className = "fa-solid fa-flag-checkered";
-            } else if (isMyTurn) {
-                turnBanner.className = "w-full mb-6 py-3 px-4 rounded-xl text-center font-bold text-lg bg-emerald-950/80 border-emerald-500 text-emerald-400 glow-active";
-                turnText.textContent = "DU BIST AM ZUG! Ziel auswählen...";
-                turnIcon.className = "fa-solid fa-crosshairs animate-spin";
-            } else {
-                turnBanner.className = "w-full mb-6 py-3 px-4 rounded-xl text-center font-bold text-lg bg-navy-800 border-navy-700 text-slate-400";
-                turnText.textContent = "Gegner ist am Zug...";
-                turnIcon.className = "fa-solid fa-hourglass-half animate-pulse";
-            }
-
-            // 2. Render Enemy Target Board (My Shots)
-            const myShots = data.shots?.[playerRole] || [];
-            const enemyShips = data[enemyRole]?.ships || [];
-
-            myShots.forEach(coord => {
-                const cell = document.querySelector(`#enemy-board [data-coord="${coord}"]`);
-                if (cell) {
-                    const isHit = enemyShips.some(s => s.coordinates.includes(coord));
-                    cell.innerHTML = isHit ? '<i class="fa-solid fa-fire text-rose-500 text-base"></i>' : '<i class="fa-solid fa-droplet text-blue-400 text-xs"></i>';
-                    cell.className = `cell border rounded flex items-center justify-center text-xs ${isHit ? 'bg-rose-950/60 border-rose-600' : 'bg-navy-950 border-navy-800'}`;
-                    cell.onclick = null; // Disable clicking spent cells
-                }
-            });
-
-            // 3. Render Own Board (Enemy Shots on my fleet)
-            const enemyShots = data.shots?.[enemyRole] || [];
-            const myShips = data[playerRole]?.ships || [];
-
-            enemyShots.forEach(coord => {
-                const cell = document.querySelector(`#own-board [data-coord="${coord}"]`);
-                if (cell) {
-                    const isHit = myShips.some(s => s.coordinates.includes(coord));
-                    cell.innerHTML = isHit ? '<i class="fa-solid fa-explosion text-amber-400 text-base"></i>' : '<i class="fa-solid fa-xmark text-slate-600 text-xs"></i>';
-                    if (isHit) {
-                        cell.className = 'cell border border-rose-500 bg-rose-900/80 rounded flex items-center justify-center';
+        function placeShipsRandomly() {
+            playerBoard = Array(10).fill(null).map(() => Array(10).fill(0));
+            for(let size of shipSizes) {
+                let placed = false;
+                let attempts = 0;
+                while(!placed && attempts < 100) {
+                    attempts++;
+                    let h = Math.random() < 0.5;
+                    let r = Math.floor(Math.random() * 10);
+                    let c = Math.floor(Math.random() * 10);
+                    if(canPlaceShip(playerBoard, r, c, size, h)) {
+                        setShip(playerBoard, r, c, size, h);
+                        placed = true;
                     }
                 }
-            });
+            }
+            currentShipIndex = shipSizes.length;
+            drawSetupBoard();
+            ui.startBtn.classList.remove('hidden');
+        }
 
-            // 4. Update Logs
-            const logContainer = document.getElementById('combat-log');
-            if (data.logs && data.logs.length > 0) {
-                logContainer.innerHTML = data.logs.slice(-10).reverse().map(log => `<p class="border-b border-navy-700/50 pb-0.5">${log}</p>`).join('');
+        function canPlaceShip(board, r, c, size, h) {
+            if(h && c + size > 10) return false;
+            if(!h && r + size > 10) return false;
+
+            for(let i=0; i<size; i++) {
+                let nr = h ? r : r + i;
+                let nc = h ? c + i : c;
+                if(board[nr][nc] === 1) return false;
+                // Abstand prüfen
+                for(let dr=-1; dr<=1; dr++) {
+                    for(let dc=-1; dc<=1; dc++) {
+                        let ar = nr + dr, ac = nc + dc;
+                        if(ar >= 0 && ar < 10 && ac >= 0 && ac < 10) {
+                            if(board[ar][ac] === 1) return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        function setShip(board, r, c, size, h) {
+            for(let i=0; i<size; i++) {
+                let nr = h ? r : r + i;
+                let nc = h ? c + i : c;
+                board[nr][nc] = 1;
             }
         }
 
-        function showGameOverModal(winnerRole) {
-            const modal = document.getElementById('modal-gameover');
-            const title = document.getElementById('gameover-title');
-            const desc = document.getElementById('gameover-desc');
-            const iconContainer = document.getElementById('gameover-icon-container');
-
-            const isWinner = winnerRole === playerRole;
-
-            if (isWinner) {
-                title.textContent = "SIEG!";
-                title.className = "text-3xl font-black mb-2 text-emerald-400";
-                desc.textContent = "Ausgezeichnete Taktik, Admiral! Die feindliche Flotte wurde vollständig vernichtet.";
-                iconContainer.innerHTML = '<i class="fa-solid fa-trophy text-6xl text-amber-400 animate-bounce"></i>';
-            } else {
-                title.textContent = "NIEDERLAGE!";
-                title.className = "text-3xl font-black mb-2 text-rose-500";
-                desc.textContent = "Eure Flotte wurde zerstört. Das Hauptquartier befiehlt den Rückzug!";
-                iconContainer.innerHTML = '<i class="fa-solid fa-skull-crossbones text-6xl text-rose-500"></i>';
+        function handleSetupGridClick(r, c) {
+            if(iAmReady) return;
+            if(currentShipIndex >= shipSizes.length) {
+                // Neu starten bei Klick wenn schon platziert
+                initSetup();
+                return;
             }
-
-            modal.classList.remove('hidden');
+            let size = shipSizes[currentShipIndex];
+            if(canPlaceShip(playerBoard, r, c, size, horizontal)) {
+                setShip(playerBoard, r, c, size, horizontal);
+                currentShipIndex++;
+                drawSetupBoard();
+                if(currentShipIndex >= shipSizes.length) {
+                    ui.startBtn.classList.remove('hidden');
+                }
+            }
         }
 
-        document.getElementById('btn-restart').addEventListener('click', () => {
-            location.reload();
+        ui.rotateBtn.addEventListener('click', () => {
+            horizontal = !horizontal;
+            ui.rotateBtn.textContent = `Richtung: ${horizontal ? 'Horizontal' : 'Vertikal'}`;
         });
 
+        ui.randomBtn.addEventListener('click', placeShipsRandomly);
+
+        ui.startBtn.addEventListener('click', () => {
+            iAmReady = true;
+            ui.startBtn.textContent = "Warte auf Gegner...";
+            ui.startBtn.disabled = true;
+            checkReadyState();
+        });
+
+        // --- NETZWERK & PEERJS ---
+        function getPeerId(roomCode) {
+            return "sschiff_" + roomCode.trim().toLowerCase();
+        }
+
+        ui.createBtn.addEventListener('click', () => {
+            const code = ui.roomInput.value.trim();
+            if(code.length < 2) {
+                showStatus("Bitte mind. 2 Zeichen eingeben!");
+                return;
+            }
+            showStatus("Erstelle Raum...");
+            isHost = true;
+            
+            if(peer) peer.destroy();
+            peer = new Peer(getPeerId(code));
+
+            peer.on('open', () => {
+                showStatus("Raum bereit! Warte auf Mitspieler...");
+                ui.createBtn.disabled = true;
+                ui.joinBtn.disabled = true;
+            });
+
+            peer.on('connection', (incomingConn) => {
+                conn = incomingConn;
+                setupConnection();
+                showStatus("Mitspieler verbunden!");
+                switchToSetup();
+            });
+
+            peer.on('error', (err) => {
+                showStatus("Fehler: Raum existiert bereits oder Netzwerkfehler.");
+            });
+        });
+
+        ui.joinBtn.addEventListener('click', () => {
+            const code = ui.roomInput.value.trim();
+            if(code.length < 2) {
+                showStatus("Bitte Raumcode eingeben!");
+                return;
+            }
+            showStatus("Verbinde mit Raum...");
+            isHost = false;
+
+            if(peer) peer.destroy();
+            peer = new Peer();
+
+            peer.on('open', () => {
+                conn = peer.connect(getPeerId(code));
+                setupConnection();
+            });
+
+            peer.on('error', (err) => {
+                showStatus("Raum nicht gefunden oder Fehler.");
+            });
+        });
+
+        function setupConnection() {
+            conn.on('open', () => {
+                if(!isHost) {
+                    switchToSetup();
+                }
+            });
+
+            conn.on('data', (data) => {
+                handleNetworkData(data);
+            });
+
+            conn.on('close', () => {
+                alert("Verbindung zum Mitspieler verloren!");
+                location.reload();
+            });
+        }
+
+        function switchToSetup() {
+            ui.menu.classList.add('hidden');
+            ui.setup.classList.remove('hidden');
+            createGridElements(ui.setupGrid, false);
+            initSetup();
+        }
+
+        function checkReadyState() {
+            conn.send({ type: 'READY' });
+            if(opponentReady) {
+                startGame();
+            }
+        }
+
+        function handleNetworkData(data) {
+            if(data.type === 'READY') {
+                opponentReady = true;
+                if(iAmReady) {
+                    startGame();
+                } else {
+                    logMessage("Gegner ist bereit!");
+                }
+            } else if(data.type === 'SHOT') {
+                receiveShot(data.r, data.c);
+            } else if(data.type === 'SHOT_RESULT') {
+                handleShotResult(data.r, data.c, data.hit, data.gameOver);
+            }
+        }
+
+        // --- SPIELABLAUF ---
+        function startGame() {
+            ui.setup.classList.add('hidden');
+            ui.game.classList.remove('hidden');
+            createGridElements(ui.playerGrid, false);
+            createGridElements(ui.enemyGrid, true);
+            drawPlayerBoardInGame();
+
+            gameActive = true;
+            // Host fängt an
+            myTurn = isHost;
+            updateTurnIndicator();
+            logMessage("Spiel gestartet! " + (myTurn ? "Du beginnst." : "Gegner beginnt."));
+        }
+
+        function drawPlayerBoardInGame() {
+            const cells = ui.playerGrid.children;
+            for(let r=0; r<10; r++) {
+                for(let c=0; c<10; c++) {
+                    const idx = 11 + r * 11 + c;
+                    const cell = cells[idx];
+                    cell.className = 'cell';
+                    if(playerBoard[r][c] === 1) cell.classList.add('ship');
+                    if(enemyShots[r][c] === 2) cell.classList.add('hit');
+                    if(enemyShots[r][c] === 1) cell.classList.add('miss');
+                }
+            }
+        }
+
+        function drawEnemyBoardInGame() {
+            const cells = ui.enemyGrid.children;
+            for(let r=0; r<10; r++) {
+                for(let c=0; c<10; c++) {
+                    const idx = 11 + r * 11 + c;
+                    const cell = cells[idx];
+                    cell.className = 'cell';
+                    if(myShots[r][c] === 2) cell.classList.add('hit');
+                    if(myShots[r][c] === 1) cell.classList.add('miss');
+                }
+            }
+        }
+
+        function handleEnemyGridClick(r, c) {
+            if(!gameActive || !myTurn) return;
+            if(myShots[r][c] !== 0) return; // Schon beschossen
+
+            // Schuss abschicken
+            conn.send({ type: 'SHOT', r: r, c: c });
+            myTurn = false;
+            updateTurnIndicator();
+        }
+
+        function receiveShot(r, c) {
+            let hit = false;
+            if(playerBoard[r][c] === 1) {
+                playerBoard[r][c] = 2; // getroffen
+                enemyShots[r][c] = 2;
+                hit = true;
+            } else {
+                enemyShots[r][c] = 1; // vorbei
+            }
+            drawPlayerBoardInGame();
+
+            // Prüfen ob verloren
+            let gameOver = checkGameOver(playerBoard);
+
+            conn.send({ type: 'SHOT_RESULT', r: r, c: c, hit: hit, gameOver: gameOver });
+
+            if(gameOver) {
+                gameActive = false;
+                ui.turnIndicator.textContent = "Niederlage! Alle deine Schiffe wurden versenkt.";
+                ui.turnIndicator.style.color = "var(--danger)";
+                logMessage("Du hast verloren!");
+            } else {
+                myTurn = true;
+                updateTurnIndicator();
+                logMessage(`Gegner schoss auf ${letters[r]}${c+1}: ${hit ? 'Treffer!' : 'Vorbei.'}`);
+            }
+        }
+
+        function handleShotResult(r, c, hit, gameOver) {
+            myShots[r][c] = hit ? 2 : 1;
+            drawEnemyBoardInGame();
+
+            if(gameOver) {
+                gameActive = false;
+                ui.turnIndicator.textContent = "Sieg! Du hast alle gegnerischen Schiffe versenkt!";
+                ui.turnIndicator.style.color = "var(--accent)";
+                logMessage("Du hast gewonnen!");
+            } else {
+                if(!hit) {
+                    myTurn = false;
+                    updateTurnIndicator();
+                } else {
+                    myTurn = true; // Treffer = nochmal schießen
+                    updateTurnIndicator();
+                }
+                logMessage(`Dein Schuss auf ${letters[r]}${c+1}: ${hit ? 'Treffer! Du darfst nochmal.' : 'Vorbei.'}`);
+            }
+        }
+
+        function checkGameOver(board) {
+            for(let r=0; r<10; r++) {
+                for(let c=0; c<10; c++) {
+                    if(board[r][c] === 1) return false; // Es gibt noch heile Schiffsteile
+                }
+            }
+            return true;
+        }
+
+        function updateTurnIndicator() {
+            if(!gameActive) return;
+            if(myTurn) {
+                ui.turnIndicator.textContent = "Du bist am Zug! Wähle ein Feld beim Gegner.";
+                ui.turnIndicator.style.color = "var(--accent)";
+            } else {
+                ui.turnIndicator.textContent = "Gegner ist am Zug...";
+                ui.turnIndicator.style.color = "var(--text-muted)";
+            }
+        }
+
+        function logMessage(msg) {
+            ui.gameLog.innerHTML += `<div>> ${msg}</div>`;
+            ui.gameLog.scrollTop = ui.gameLog.scrollHeight;
+        }
     </script>
 </body>
 </html>
-```
