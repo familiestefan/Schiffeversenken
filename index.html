@@ -18,11 +18,11 @@
             --text-muted: #94a3b8;
             --border: #334155;
             
-            /* NEU: Klassisches Marine-Blau für das Wasser & Hellgrau für Schiffe */
-            --water-bg: #1e3a8a;
-            --water-border: #1d4ed8;
-            --ship-color: #cbd5e1;
-            --ship-border: #94a3b8;
+            /* FARBEN: Maximaler Kontrast */
+            --water-bg: #030712;         /* Tiefes Schwarz-Blau für Meer */
+            --water-border: #1e3a8a;     /* Blaue Gitterlinien */
+            --ship-color: #facc15;       /* KNALLIGES GELB/GOLD FÜR SCHIFFE */
+            --ship-border: #ffffff;      /* Weißer Rand um die Schiffe */
         }
 
         * {
@@ -170,10 +170,11 @@
             cursor: default !important;
         }
 
-        /* NEU: Schiffe hellgrau, klar unterscheidbar vom blauen Wasser */
+        /* SCHIFFE: Knalliges Gelb mit weißem Rand */
         .ship {
             background-color: var(--ship-color) !important;
-            border: 1px solid var(--ship-border);
+            border: 2px solid var(--ship-border) !important;
+            box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
         }
 
         .hit {
@@ -183,7 +184,7 @@
         }
 
         .miss {
-            background-color: #1e293b !important;
+            background-color: #334155 !important;
             color: var(--text-muted);
         }
 
@@ -203,11 +204,19 @@
         }
 
         .fleet-setup-bar {
-            display: flex;
-            gap: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
             margin-top: 10px;
             width: 100%;
             max-width: 450px;
+        }
+
+        .fleet-info {
+            font-size: 0.9rem;
+            color: #facc15;
+            font-weight: bold;
+            margin-top: 8px;
         }
     </style>
 </head>
@@ -227,15 +236,19 @@
     <!-- ANSICHT 2: Schiff-Platzierung -->
     <div id="setup-screen" class="card hidden">
         <h2>Flotte positionieren</h2>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">Tippe auf das Spielfeld, um deine Schiffe zu setzen.</p>
-        <div class="board-wrapper">
-            <div class="board-title">Dein Hafen</div>
+        <div id="ship-status-text" class="fleet-info">Tippe auf das Feld um Schiffe zu setzen</div>
+        
+        <div class="board-wrapper" style="margin-top: 10px;">
+            <div class="board-title">Dein Hafen (Gelb = Schiff)</div>
             <div id="setup-grid" class="grid"></div>
         </div>
+
         <div class="fleet-setup-bar">
-            <button id="rotate-btn" class="secondary" style="margin:0;">Richtung: Horizontal</button>
-            <button id="random-btn" style="margin:0;">Zufall</button>
+            <button id="rotate-btn" class="secondary" style="margin:0; font-size:0.8rem; padding:8px;">Horiz.</button>
+            <button id="clear-btn" class="secondary" style="margin:0; font-size:0.8rem; padding:8px; background:#ef4444;">Löschen</button>
+            <button id="random-btn" style="margin:0; font-size:0.8rem; padding:8px;">Zufall</button>
         </div>
+
         <button id="start-game-btn" class="accent hidden" style="margin-top: 15px;">Bereit &amp; Starten</button>
     </div>
 
@@ -252,7 +265,7 @@
             </div>
             
             <div class="board-wrapper">
-                <div class="board-title">Deine Flotte</div>
+                <div class="board-title">Deine Flotte (Gelb)</div>
                 <div id="player-grid" class="grid"></div>
             </div>
         </div>
@@ -289,9 +302,11 @@
             enemyGrid: document.getElementById('enemy-grid'),
             rotateBtn: document.getElementById('rotate-btn'),
             randomBtn: document.getElementById('random-btn'),
+            clearBtn: document.getElementById('clear-btn'),
             startBtn: document.getElementById('start-game-btn'),
             turnIndicator: document.getElementById('turn-indicator'),
-            gameLog: document.getElementById('game-log')
+            gameLog: document.getElementById('game-log'),
+            shipStatusText: document.getElementById('ship-status-text')
         };
 
         function showStatus(text) {
@@ -333,13 +348,23 @@
             }
         }
 
-        function initSetup() {
+        function clearSetup() {
             playerBoard = Array(10).fill(null).map(() => Array(10).fill(0));
             currentShipIndex = 0;
             iAmReady = false;
             ui.startBtn.classList.add('hidden');
-            placeShipsRandomly();
+            ui.startBtn.disabled = false;
+            ui.startBtn.textContent = "Bereit & Starten";
+            updateShipStatusText();
             drawSetupBoard();
+        }
+
+        function updateShipStatusText() {
+            if(currentShipIndex < shipSizes.length) {
+                ui.shipStatusText.textContent = `Setze Schiff: ${shipSizes[currentShipIndex]}er Feld(er) (${currentShipIndex+1}/${shipSizes.length})`;
+            } else {
+                ui.shipStatusText.textContent = "Alle Schiffe platziert!";
+            }
         }
 
         function drawSetupBoard() {
@@ -375,6 +400,7 @@
                 }
             }
             currentShipIndex = shipSizes.length;
+            updateShipStatusText();
             drawSetupBoard();
             ui.startBtn.classList.remove('hidden');
         }
@@ -409,14 +435,18 @@
 
         function handleSetupGridClick(r, c) {
             if(iAmReady) return;
+            
+            // Wenn alle Schiffe platziert sind, setzt ein Klick die Auswahl zurück
             if(currentShipIndex >= shipSizes.length) {
-                initSetup();
+                clearSetup();
                 return;
             }
+
             let size = shipSizes[currentShipIndex];
             if(canPlaceShip(playerBoard, r, c, size, horizontal)) {
                 setShip(playerBoard, r, c, size, horizontal);
                 currentShipIndex++;
+                updateShipStatusText();
                 drawSetupBoard();
                 if(currentShipIndex >= shipSizes.length) {
                     ui.startBtn.classList.remove('hidden');
@@ -426,10 +456,11 @@
 
         ui.rotateBtn.addEventListener('click', () => {
             horizontal = !horizontal;
-            ui.rotateBtn.textContent = `Richtung: ${horizontal ? 'Horizontal' : 'Vertikal'}`;
+            ui.rotateBtn.textContent = horizontal ? 'Horiz.' : 'Vertik.';
         });
 
         ui.randomBtn.addEventListener('click', placeShipsRandomly);
+        ui.clearBtn.addEventListener('click', clearSetup);
 
         ui.startBtn.addEventListener('click', () => {
             iAmReady = true;
@@ -515,7 +546,8 @@
             ui.menu.classList.add('hidden');
             ui.setup.classList.remove('hidden');
             createGridElements(ui.setupGrid, false);
-            initSetup();
+            clearSetup();
+            placeShipsRandomly(); // Vorab einmal zufällig als Vorschlag setzen
         }
 
         function checkReadyState() {
