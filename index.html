@@ -17,6 +17,12 @@
             --text: #f8fafc;
             --text-muted: #94a3b8;
             --border: #334155;
+            
+            /* NEU: Klassisches Marine-Blau für das Wasser & Hellgrau für Schiffe */
+            --water-bg: #1e3a8a;
+            --water-border: #1d4ed8;
+            --ship-color: #cbd5e1;
+            --ship-border: #94a3b8;
         }
 
         * {
@@ -137,7 +143,7 @@
             grid-template-columns: 25px repeat(10, 1fr);
             grid-template-rows: 25px repeat(10, 1fr);
             gap: 2px;
-            background: var(--border);
+            background: var(--water-border);
             padding: 2px;
             border-radius: 4px;
             max-width: 320px;
@@ -145,7 +151,7 @@
         }
 
         .cell {
-            background-color: #0f172a;
+            background-color: var(--water-bg);
             aspect-ratio: 1;
             display: flex;
             align-items: center;
@@ -164,17 +170,20 @@
             cursor: default !important;
         }
 
+        /* NEU: Schiffe hellgrau, klar unterscheidbar vom blauen Wasser */
         .ship {
-            background-color: #64748b;
+            background-color: var(--ship-color) !important;
+            border: 1px solid var(--ship-border);
         }
 
         .hit {
             background-color: var(--danger) !important;
             color: white;
+            font-weight: bold;
         }
 
         .miss {
-            background-color: #334155 !important;
+            background-color: #1e293b !important;
             color: var(--text-muted);
         }
 
@@ -255,15 +264,13 @@
         const letters = ['A','B','C','D','E','F','G','H','I','J'];
         let peer = null, conn = null;
         let isHost = false;
-        let gameState = 'menu'; // menu, setup, waiting, battle, over
 
-        // Schiffsgrößen: 1x 4er, 2x 3er, 3x 2er, 4x 1er
         const shipSizes = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1];
         let currentShipIndex = 0;
         let horizontal = true;
         let playerBoard = Array(10).fill(null).map(() => Array(10).fill(0));
-        let enemyShots = Array(10).fill(null).map(() => Array(10).fill(0)); // 0: leer, 1: schuss, 2: treffer
-        let myShots = Array(10).fill(null).map(() => Array(10).fill(0));    // 0: leer, 1: wasser, 2: treffer
+        let enemyShots = Array(10).fill(null).map(() => Array(10).fill(0)); 
+        let myShots = Array(10).fill(null).map(() => Array(10).fill(0));    
         let myTurn = false;
         let gameActive = false;
         let opponentReady = false;
@@ -292,15 +299,12 @@
             ui.menuStatus.classList.remove('hidden');
         }
 
-        // --- HILFSFUNKTIONEN GRIDS ---
         function createGridElements(container, isEnemy) {
             container.innerHTML = '';
-            // Ecke oben links
             const corner = document.createElement('div');
             corner.className = 'cell header-cell';
             container.appendChild(corner);
 
-            // Spalten 1-10
             for(let c=1; c<=10; c++) {
                 const cell = document.createElement('div');
                 cell.className = 'cell header-cell';
@@ -309,7 +313,6 @@
             }
 
             for(let r=0; r<10; r++) {
-                // Zeilen A-J
                 const rowHeader = document.createElement('div');
                 rowHeader.className = 'cell header-cell';
                 rowHeader.textContent = letters[r];
@@ -330,7 +333,6 @@
             }
         }
 
-        // --- SETUP LOGIK ---
         function initSetup() {
             playerBoard = Array(10).fill(null).map(() => Array(10).fill(0));
             currentShipIndex = 0;
@@ -344,7 +346,7 @@
             const cells = ui.setupGrid.children;
             for(let r=0; r<10; r++) {
                 for(let c=0; c<10; c++) {
-                    const idx = 11 + r * 11 + c; // Offset durch Header
+                    const idx = 11 + r * 11 + c;
                     const cell = cells[idx];
                     if(cell) {
                         cell.className = 'cell';
@@ -385,7 +387,6 @@
                 let nr = h ? r : r + i;
                 let nc = h ? c + i : c;
                 if(board[nr][nc] === 1) return false;
-                // Abstand prüfen
                 for(let dr=-1; dr<=1; dr++) {
                     for(let dc=-1; dc<=1; dc++) {
                         let ar = nr + dr, ac = nc + dc;
@@ -409,7 +410,6 @@
         function handleSetupGridClick(r, c) {
             if(iAmReady) return;
             if(currentShipIndex >= shipSizes.length) {
-                // Neu starten bei Klick wenn schon platziert
                 initSetup();
                 return;
             }
@@ -438,7 +438,6 @@
             checkReadyState();
         });
 
-        // --- NETZWERK & PEERJS ---
         function getPeerId(roomCode) {
             return "sschiff_" + roomCode.trim().toLowerCase();
         }
@@ -541,7 +540,6 @@
             }
         }
 
-        // --- SPIELABLAUF ---
         function startGame() {
             ui.setup.classList.add('hidden');
             ui.game.classList.remove('hidden');
@@ -550,7 +548,6 @@
             drawPlayerBoardInGame();
 
             gameActive = true;
-            // Host fängt an
             myTurn = isHost;
             updateTurnIndicator();
             logMessage("Spiel gestartet! " + (myTurn ? "Du beginnst." : "Gegner beginnt."));
@@ -585,9 +582,8 @@
 
         function handleEnemyGridClick(r, c) {
             if(!gameActive || !myTurn) return;
-            if(myShots[r][c] !== 0) return; // Schon beschossen
+            if(myShots[r][c] !== 0) return;
 
-            // Schuss abschicken
             conn.send({ type: 'SHOT', r: r, c: c });
             myTurn = false;
             updateTurnIndicator();
@@ -596,17 +592,15 @@
         function receiveShot(r, c) {
             let hit = false;
             if(playerBoard[r][c] === 1) {
-                playerBoard[r][c] = 2; // getroffen
+                playerBoard[r][c] = 2;
                 enemyShots[r][c] = 2;
                 hit = true;
             } else {
-                enemyShots[r][c] = 1; // vorbei
+                enemyShots[r][c] = 1;
             }
             drawPlayerBoardInGame();
 
-            // Prüfen ob verloren
             let gameOver = checkGameOver(playerBoard);
-
             conn.send({ type: 'SHOT_RESULT', r: r, c: c, hit: hit, gameOver: gameOver });
 
             if(gameOver) {
@@ -635,7 +629,7 @@
                     myTurn = false;
                     updateTurnIndicator();
                 } else {
-                    myTurn = true; // Treffer = nochmal schießen
+                    myTurn = true;
                     updateTurnIndicator();
                 }
                 logMessage(`Dein Schuss auf ${letters[r]}${c+1}: ${hit ? 'Treffer! Du darfst nochmal.' : 'Vorbei.'}`);
@@ -645,7 +639,7 @@
         function checkGameOver(board) {
             for(let r=0; r<10; r++) {
                 for(let c=0; c<10; c++) {
-                    if(board[r][c] === 1) return false; // Es gibt noch heile Schiffsteile
+                    if(board[r][c] === 1) return false;
                 }
             }
             return true;
