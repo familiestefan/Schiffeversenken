@@ -18,11 +18,10 @@
             --text-muted: #94a3b8;
             --border: #334155;
             
-            /* FARBEN: Maximaler Kontrast */
-            --water-bg: #030712;         /* Tiefes Schwarz-Blau für Meer */
-            --water-border: #1e3a8a;     /* Blaue Gitterlinien */
-            --ship-color: #facc15;       /* KNALLIGES GELB/GOLD FÜR SCHIFFE */
-            --ship-border: #ffffff;      /* Weißer Rand um die Schiffe */
+            --water-bg: #030712;
+            --water-border: #1e3a8a;
+            --ship-color: #facc15;
+            --ship-border: #ffffff;
         }
 
         * {
@@ -112,7 +111,6 @@
             font-size: 0.95rem;
         }
 
-        /* Spielfelder Grid */
         .board-container {
             display: flex;
             flex-direction: column;
@@ -156,10 +154,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.65rem;
+            font-size: 0.75rem;
+            font-weight: bold;
             cursor: pointer;
             border-radius: 2px;
             user-select: none;
+            color: white;
         }
 
         .header-cell {
@@ -170,17 +170,14 @@
             cursor: default !important;
         }
 
-        /* SCHIFFE: Knalliges Gelb mit weißem Rand */
         .ship {
             background-color: var(--ship-color) !important;
             border: 2px solid var(--ship-border) !important;
-            box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
         }
 
         .hit {
             background-color: var(--danger) !important;
             color: white;
-            font-weight: bold;
         }
 
         .miss {
@@ -224,7 +221,6 @@
 
     <h1>Schiffe Versenken</h1>
 
-    <!-- ANSICHT 1: Menü -->
     <div id="menu-screen" class="card">
         <p style="margin-bottom: 15px; color: var(--text-muted);">Gib einen 4-stelligen Raumcode ein (z.B. 1234), um ein Spiel zu starten oder beizutreten.</p>
         <input type="text" id="room-code-input" maxlength="6" placeholder="z.B. 4711">
@@ -233,7 +229,6 @@
         <div id="menu-status" class="status-box hidden" style="color: var(--danger); margin-top: 10px;"></div>
     </div>
 
-    <!-- ANSICHT 2: Schiff-Platzierung -->
     <div id="setup-screen" class="card hidden">
         <h2>Flotte positionieren</h2>
         <div id="ship-status-text" class="fleet-info">Tippe auf das Feld um Schiffe zu setzen</div>
@@ -244,7 +239,7 @@
         </div>
 
         <div class="fleet-setup-bar">
-            <button id="rotate-btn" class="secondary" style="margin:0; font-size:0.8rem; padding:8px;">Horiz.</button>
+            <button id="rotate-btn" class="secondary" style="margin:0; font-size:0.8rem; padding:8px;">Horizontal</button>
             <button id="clear-btn" class="secondary" style="margin:0; font-size:0.8rem; padding:8px; background:#ef4444;">Löschen</button>
             <button id="random-btn" style="margin:0; font-size:0.8rem; padding:8px;">Zufall</button>
         </div>
@@ -252,7 +247,6 @@
         <button id="start-game-btn" class="accent hidden" style="margin-top: 15px;">Bereit &amp; Starten</button>
     </div>
 
-    <!-- ANSICHT 3: Aktives Spiel -->
     <div id="game-screen" class="hidden" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
         <div id="turn-indicator" class="card" style="padding: 10px; margin-bottom: 10px; font-weight: bold; font-size: 1rem;">
             Warte auf Mitspieler...
@@ -265,7 +259,7 @@
             </div>
             
             <div class="board-wrapper">
-                <div class="board-title">Deine Flotte (Gelb)</div>
+                <div class="board-title">Deine Flotte</div>
                 <div id="player-grid" class="grid"></div>
             </div>
         </div>
@@ -278,7 +272,8 @@
         let peer = null, conn = null;
         let isHost = false;
 
-        const shipSizes = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1];
+        // Deine gewünschte Flotte: 1x6, 1x5, 1x4, 2x3, 1x2
+        const shipSizes = [6, 5, 4, 3, 3, 2];
         let currentShipIndex = 0;
         let horizontal = true;
         let playerBoard = Array(10).fill(null).map(() => Array(10).fill(0));
@@ -388,7 +383,7 @@
             for(let size of shipSizes) {
                 let placed = false;
                 let attempts = 0;
-                while(!placed && attempts < 100) {
+                while(!placed && attempts < 200) {
                     attempts++;
                     let h = Math.random() < 0.5;
                     let r = Math.floor(Math.random() * 10);
@@ -435,8 +430,6 @@
 
         function handleSetupGridClick(r, c) {
             if(iAmReady) return;
-            
-            // Wenn alle Schiffe platziert sind, setzt ein Klick die Auswahl zurück
             if(currentShipIndex >= shipSizes.length) {
                 clearSetup();
                 return;
@@ -456,7 +449,7 @@
 
         ui.rotateBtn.addEventListener('click', () => {
             horizontal = !horizontal;
-            ui.rotateBtn.textContent = horizontal ? 'Horiz.' : 'Vertik.';
+            ui.rotateBtn.textContent = horizontal ? 'Horizontal' : 'Vertikal';
         });
 
         ui.randomBtn.addEventListener('click', placeShipsRandomly);
@@ -498,8 +491,8 @@
                 switchToSetup();
             });
 
-            peer.on('error', (err) => {
-                showStatus("Fehler: Raum existiert bereits oder Netzwerkfehler.");
+            peer.on('error', () => {
+                showStatus("Fehler: Raum existiert bereits.");
             });
         });
 
@@ -520,8 +513,8 @@
                 setupConnection();
             });
 
-            peer.on('error', (err) => {
-                showStatus("Raum nicht gefunden oder Fehler.");
+            peer.on('error', () => {
+                showStatus("Raum nicht gefunden.");
             });
         });
 
@@ -537,7 +530,7 @@
             });
 
             conn.on('close', () => {
-                alert("Verbindung zum Mitspieler verloren!");
+                alert("Verbindung verloren!");
                 location.reload();
             });
         }
@@ -547,7 +540,7 @@
             ui.setup.classList.remove('hidden');
             createGridElements(ui.setupGrid, false);
             clearSetup();
-            placeShipsRandomly(); // Vorab einmal zufällig als Vorschlag setzen
+            placeShipsRandomly();
         }
 
         function checkReadyState() {
@@ -592,9 +585,16 @@
                     const idx = 11 + r * 11 + c;
                     const cell = cells[idx];
                     cell.className = 'cell';
+                    cell.textContent = '';
                     if(playerBoard[r][c] === 1) cell.classList.add('ship');
-                    if(enemyShots[r][c] === 2) cell.classList.add('hit');
-                    if(enemyShots[r][c] === 1) cell.classList.add('miss');
+                    if(enemyShots[r][c] === 2) {
+                        cell.classList.add('hit');
+                        cell.textContent = 'X';
+                    }
+                    if(enemyShots[r][c] === 1) {
+                        cell.classList.add('miss');
+                        cell.textContent = 'O';
+                    }
                 }
             }
         }
@@ -606,8 +606,15 @@
                     const idx = 11 + r * 11 + c;
                     const cell = cells[idx];
                     cell.className = 'cell';
-                    if(myShots[r][c] === 2) cell.classList.add('hit');
-                    if(myShots[r][c] === 1) cell.classList.add('miss');
+                    cell.textContent = '';
+                    if(myShots[r][c] === 2) {
+                        cell.classList.add('hit');
+                        cell.textContent = 'X';
+                    }
+                    if(myShots[r][c] === 1) {
+                        cell.classList.add('miss');
+                        cell.textContent = 'O';
+                    }
                 }
             }
         }
@@ -637,7 +644,7 @@
 
             if(gameOver) {
                 gameActive = false;
-                ui.turnIndicator.textContent = "Niederlage! Alle deine Schiffe wurden versenkt.";
+                ui.turnIndicator.textContent = "Niederlage! Alle Schiffe versenkt.";
                 ui.turnIndicator.style.color = "var(--danger)";
                 logMessage("Du hast verloren!");
             } else {
@@ -653,7 +660,7 @@
 
             if(gameOver) {
                 gameActive = false;
-                ui.turnIndicator.textContent = "Sieg! Du hast alle gegnerischen Schiffe versenkt!";
+                ui.turnIndicator.textContent = "Sieg! Du hast gewonnen!";
                 ui.turnIndicator.style.color = "var(--accent)";
                 logMessage("Du hast gewonnen!");
             } else {
@@ -664,7 +671,7 @@
                     myTurn = true;
                     updateTurnIndicator();
                 }
-                logMessage(`Dein Schuss auf ${letters[r]}${c+1}: ${hit ? 'Treffer! Du darfst nochmal.' : 'Vorbei.'}`);
+                logMessage(`Dein Schuss auf ${letters[r]}${c+1}: ${hit ? 'Treffer! Noch ein Zug.' : 'Vorbei.'}`);
             }
         }
 
