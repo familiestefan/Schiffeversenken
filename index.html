@@ -1,0 +1,926 @@
+```html
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schiffe Versenken - Online Multiplayer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome für Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: {
+                            900: '#0a1128',
+                            800: '#1c2541',
+                            700: '#273859',
+                            600: '#3a506b',
+                        },
+                        cyan: {
+                            glow: '#00f5d4',
+                            radar: '#00bbf9'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['Share Tech Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #0a1128;
+            color: #f1f5f9;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Radar scan animation */
+        .radar-grid {
+            background-image: 
+                radial-gradient(rgba(0, 245, 212, 0.15) 1px, transparent 0),
+                linear-gradient(to right, rgba(0, 245, 212, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 245, 212, 0.05) 1px, transparent 1px);
+            background-size: 100% 100%, 10% 10%, 10% 10%;
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            transition: all 0.15s ease;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a1128;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #273859;
+            border-radius: 3px;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 15px rgba(0, 245, 212, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(0, 245, 212, 0.8); }
+        }
+
+        .glow-active {
+            animation: pulse-glow 2s infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans justify-between bg-navy-900 text-slate-100">
+
+    <!-- Header / Navigation -->
+    <header class="border-b border-navy-700 bg-navy-800/80 backdrop-blur sticky top-0 z-50 p-4">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-crosshairs text-cyan-glow text-2xl animate-spin" style="animation-duration: 12s;"></i>
+                <h1 class="text-xl md:text-2xl font-extrabold tracking-wider bg-gradient-to-r from-cyan-glow to-blue-400 bg-clip-text text-transparent">
+                    FLOTTENMANÖVER
+                </h1>
+            </div>
+            <div id="room-badge" class="hidden bg-navy-700 border border-cyan-glow/40 px-3 py-1 rounded-full text-xs font-mono flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>RAUM: <strong id="display-room-code" class="text-cyan-glow text-sm">----</strong></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-4xl w-full mx-auto p-4 flex-grow flex flex-col justify-center">
+
+        <!-- LOBBY SCREEN -->
+        <div id="screen-lobby" class="flex flex-col items-center justify-center py-8">
+            <div class="bg-navy-800 p-6 md:p-8 rounded-2xl border border-navy-600 shadow-2xl max-w-md w-full relative overflow-hidden">
+                <div class="absolute -right-10 -bottom-10 opacity-10">
+                    <i class="fa-solid fa-ship text-9xl text-cyan-glow"></i>
+                </div>
+
+                <h2 class="text-2xl font-bold mb-6 text-center text-white">Online Gefecht starten</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Dein Kommandanten-Name</label>
+                        <input type="text" id="input-player-name" maxlength="12" placeholder="z.B. Admiral_X" 
+                            class="w-full bg-navy-900 border border-navy-600 rounded-xl px-4 py-3 text-cyan-glow font-mono focus:outline-none focus:border-cyan-glow">
+                    </div>
+
+                    <div class="pt-2">
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">4-Stelliger Raum-Code</label>
+                        <input type="text" id="input-room-code" maxlength="4" placeholder="z.B. 4096" 
+                            class="w-full bg-navy-900 border border-navy-600 rounded-xl px-4 py-3 text-cyan-glow font-mono text-center text-2xl tracking-widest uppercase focus:outline-none focus:border-cyan-glow">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 pt-4">
+                        <button id="btn-create-game" class="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-plus"></i> Erstellen
+                        </button>
+                        <button id="btn-join-game" class="bg-navy-700 hover:bg-navy-600 text-cyan-glow border border-cyan-glow/30 font-bold py-3 px-4 rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-right-to-bracket"></i> Beitreten
+                        </button>
+                    </div>
+                </div>
+
+                <div id="lobby-status" class="mt-4 text-center text-sm font-mono text-amber-400 min-h-[1.5rem]"></div>
+            </div>
+        </div>
+
+        <!-- WAITING SCREEN -->
+        <div id="screen-waiting" class="hidden flex-col items-center justify-center py-12 text-center">
+            <div class="bg-navy-800 p-8 rounded-2xl border border-navy-600 max-w-md w-full flex flex-col items-center">
+                <i class="fa-solid fa-satellite-dish text-5xl text-cyan-glow animate-bounce mb-4"></i>
+                <h2 class="text-2xl font-bold mb-2">Warte auf Gegenspieler...</h2>
+                <p class="text-slate-400 text-sm mb-6">Teile diesen Code mit deinem Mitspieler:</p>
+                <div class="bg-navy-900 border-2 border-dashed border-cyan-glow px-6 py-3 rounded-xl font-mono text-4xl text-cyan-glow font-bold tracking-widest mb-6">
+                    <span id="share-room-code">----</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs font-mono text-slate-400">
+                    <i class="fa-solid fa-circle-notch animate-spin text-cyan-glow"></i>
+                    Verbindung wird hergestellt...
+                </div>
+            </div>
+        </div>
+
+        <!-- PLACEMENT SCREEN -->
+        <div id="screen-placement" class="hidden flex-col items-center">
+            <div class="w-full flex flex-col md:flex-row gap-6 items-center justify-between mb-4">
+                <div>
+                    <h2 class="text-xl font-bold text-cyan-glow flex items-center gap-2">
+                        <i class="fa-solid fa-anchor"></i> Flotte Stationieren
+                    </h2>
+                    <p class="text-xs text-slate-400">Platziere deine Schiffe auf dem Koordinatenfeld.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="btn-rotate-ship" class="bg-navy-700 hover:bg-navy-600 border border-navy-600 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2">
+                        <i class="fa-solid fa-rotate"></i> Drehen: <span id="current-orientation" class="text-cyan-glow">Horiz.</span>
+                    </button>
+                    <button id="btn-random-ships" class="bg-navy-700 hover:bg-navy-600 border border-navy-600 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2">
+                        <i class="fa-solid fa-shuffle text-cyan-glow"></i> Zufall
+                    </button>
+                </div>
+            </div>
+
+            <!-- Available Ships Bar -->
+            <div id="ships-inventory" class="w-full bg-navy-800 p-3 rounded-xl border border-navy-700 mb-4 flex flex-wrap gap-3 justify-center items-center text-xs">
+                <!-- Dynamisch befüllt -->
+            </div>
+
+            <!-- Placement Board -->
+            <div class="relative bg-navy-800 p-3 rounded-2xl border border-navy-600 shadow-xl radar-grid">
+                <div id="placement-board" class="grid grid-cols-11 gap-1 max-w-[360px] sm:max-w-[420px] mx-auto">
+                    <!-- Board cells JS generated -->
+                </div>
+            </div>
+
+            <button id="btn-ready" disabled class="mt-6 w-full max-w-xs bg-slate-700 text-slate-400 font-bold py-3 px-6 rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2 cursor-not-allowed">
+                <i class="fa-solid fa-check"></i> Bereitschaft Melden
+            </button>
+        </div>
+
+        <!-- BATTLE SCREEN -->
+        <div id="screen-battle" class="hidden flex-col items-center">
+            <!-- Turn Status Indicator -->
+            <div id="turn-banner" class="w-full mb-6 py-3 px-4 rounded-xl text-center font-bold text-lg border transition-all duration-300 flex items-center justify-center gap-3">
+                <i id="turn-icon" class="fa-solid fa-circle"></i>
+                <span id="turn-text">Lade Gefechtsstatus...</span>
+            </div>
+
+            <div class="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                
+                <!-- Target Board (Enemy) -->
+                <div class="flex flex-col items-center bg-navy-800 p-4 rounded-2xl border border-navy-600 w-full shadow-xl">
+                    <h3 class="text-sm font-bold text-rose-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-crosshairs"></i> Zielgebiet (Feind)
+                    </h3>
+                    <div class="radar-grid p-2 rounded-xl bg-navy-900 border border-navy-700 w-full flex justify-center">
+                        <div id="enemy-board" class="grid grid-cols-11 gap-1 w-full max-w-[340px]">
+                            <!-- Cells JS generated -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Own Fleet Board -->
+                <div class="flex flex-col items-center bg-navy-800 p-4 rounded-2xl border border-navy-600 w-full shadow-xl">
+                    <h3 class="text-sm font-bold text-cyan-glow uppercase tracking-wider mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-shield-halved"></i> Eigene Flotte
+                    </h3>
+                    <div class="radar-grid p-2 rounded-xl bg-navy-900 border border-navy-700 w-full flex justify-center">
+                        <div id="own-board" class="grid grid-cols-11 gap-1 w-full max-w-[340px]">
+                            <!-- Cells JS generated -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Combat Log -->
+            <div class="w-full mt-6 bg-navy-800/80 border border-navy-700 rounded-xl p-3">
+                <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <i class="fa-solid fa-list-ul"></i> Gefechts-Log
+                </h4>
+                <div id="combat-log" class="h-20 overflow-y-auto font-mono text-xs space-y-1 text-slate-300">
+                    <p class="text-slate-500">Gefecht gestartet. Erwarte erste Befehle...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- GAME OVER MODAL -->
+        <div id="modal-gameover" class="hidden fixed inset-0 bg-navy-900/90 backdrop-blur z-50 flex items-center justify-center p-4">
+            <div class="bg-navy-800 border border-navy-600 p-6 md:p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl">
+                <div id="gameover-icon-container" class="mb-4">
+                    <!-- Icon JS -->
+                </div>
+                <h2 id="gameover-title" class="text-3xl font-black mb-2">SIEG!</h2>
+                <p id="gameover-desc" class="text-slate-300 text-sm mb-6">Du hast alle feindlichen Schiffe versenkt.</p>
+                <button id="btn-restart" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition">
+                    Neues Spiel
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-navy-800 py-3 text-center text-xs text-slate-500 font-mono">
+        Schiffe Versenken Web-App &bull; Realtime Multiplayer
+    </footer>
+
+    <!-- Firebase Imports & Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Initialization
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'battleship-default';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "AIzaSyDummyKeyForFallbackPurposeOnly",
+                authDomain: "demo-app.firebaseapp.com",
+                projectId: "demo-app",
+                storageBucket: "demo-app.appspot.com",
+                messagingSenderId: "00000000000",
+                appId: "1:00000000000:web:000000000000"
+            };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Global Game State Variables
+        let currentUser = null;
+        let roomCode = "";
+        let playerRole = ""; // "p1" oder "p2"
+        let roomUnsubscribe = null;
+
+        // Board & Ships Specs
+        const BOARD_SIZE = 10;
+        const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+        const SHIPS_CONFIG = [
+            { id: 'battleship', name: 'Schlachtschiff', size: 4, count: 1 },
+            { id: 'cruiser', name: 'Kreuzer', size: 3, count: 2 },
+            { id: 'destroyer', name: 'Zerstörer', size: 2, count: 3 },
+            { id: 'submarine', name: 'U-Boot', size: 1, count: 4 }
+        ];
+
+        // Player's Local Fleet Placement State
+        let selectedShipToPlace = null;
+        let orientation = 'H'; // 'H' oder 'V'
+        let placedShips = []; // [{id, name, size, coordinates: ['A1', 'A2']}]
+        let shipCounts = { battleship: 1, cruiser: 2, destroyer: 3, submarine: 4 };
+
+        // Authentication Setup
+        async function setupAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    const credentials = await signInWithCustomToken(auth, __initial_auth_token);
+                    currentUser = credentials.user;
+                } else {
+                    const credentials = await signInAnonymously(auth);
+                    currentUser = credentials.user;
+                }
+            } catch (err) {
+                console.error("Auth error:", err);
+            }
+        }
+        setupAuth();
+
+        // UI DOM Elements
+        const screens = {
+            lobby: document.getElementById('screen-lobby'),
+            waiting: document.getElementById('screen-waiting'),
+            placement: document.getElementById('screen-placement'),
+            battle: document.getElementById('screen-battle')
+        };
+
+        const roomBadge = document.getElementById('room-badge');
+        const displayRoomCode = document.getElementById('display-room-code');
+        const lobbyStatus = document.getElementById('lobby-status');
+
+        function showScreen(screenName) {
+            Object.keys(screens).forEach(key => {
+                screens[key].classList.add('hidden');
+                screens[key].classList.remove('flex');
+            });
+            screens[screenName].classList.remove('hidden');
+            screens[screenName].classList.add('flex');
+        }
+
+        // Room Path Helper
+        function getRoomDocRef(code) {
+            return doc(db, 'artifacts', appId, 'public', 'data', 'battleship_rooms', code.toUpperCase());
+        }
+
+        // --- LOBBY ACTIONS ---
+
+        document.getElementById('btn-create-game').addEventListener('click', async () => {
+            const name = document.getElementById('input-player-name').value.trim() || 'Admiral';
+            const code = document.getElementById('input-room-code').value.trim().toUpperCase();
+
+            if (code.length !== 4) {
+                lobbyStatus.textContent = "Bitte einen 4-stelligen Raum-Code eingeben!";
+                return;
+            }
+
+            if (!currentUser) await setupAuth();
+
+            roomCode = code;
+            playerRole = 'p1';
+
+            const roomRef = getRoomDocRef(roomCode);
+            try {
+                const docSnap = await getDoc(roomRef);
+                if (docSnap.exists() && docSnap.data().status !== 'finished') {
+                    lobbyStatus.textContent = "Raum existiert bereits! Wähle 'Beitreten'.";
+                    return;
+                }
+
+                const initialRoomData = {
+                    p1: { id: currentUser.uid, name: name, ready: false, ships: [], hitsReceived: [] },
+                    p2: null,
+                    turn: 'p1',
+                    status: 'waiting', // waiting, placement, playing, finished
+                    winner: null,
+                    shots: {}, // { 'p1': ['A1', 'B2'], 'p2': [] }
+                    logs: ["Raum erstellt. Warte auf Mitspieler..."]
+                };
+
+                await setDoc(roomRef, initialRoomData);
+                startRoomListener(roomCode);
+                
+                document.getElementById('share-room-code').textContent = roomCode;
+                displayRoomCode.textContent = roomCode;
+                roomBadge.classList.remove('hidden');
+                showScreen('waiting');
+
+            } catch (e) {
+                lobbyStatus.textContent = "Fehler beim Erstellen des Raums.";
+                console.error(e);
+            }
+        });
+
+        document.getElementById('btn-join-game').addEventListener('click', async () => {
+            const name = document.getElementById('input-player-name').value.trim() || 'Kapitän';
+            const code = document.getElementById('input-room-code').value.trim().toUpperCase();
+
+            if (code.length !== 4) {
+                lobbyStatus.textContent = "Bitte einen 4-stelligen Raum-Code eingeben!";
+                return;
+            }
+
+            if (!currentUser) await setupAuth();
+
+            roomCode = code;
+            playerRole = 'p2';
+
+            const roomRef = getRoomDocRef(roomCode);
+            try {
+                const docSnap = await getDoc(roomRef);
+                if (!docSnap.exists()) {
+                    lobbyStatus.textContent = "Raum nicht gefunden!";
+                    return;
+                }
+
+                const data = docSnap.data();
+                if (data.p2 && data.p2.id !== currentUser.uid) {
+                    lobbyStatus.textContent = "Raum ist bereits voll!";
+                    return;
+                }
+
+                await updateDoc(roomRef, {
+                    p2: { id: currentUser.uid, name: name, ready: false, ships: [], hitsReceived: [] },
+                    status: 'placement',
+                    logs: [...(data.logs || []), `${name} ist dem Spiel beigetreten.`]
+                });
+
+                displayRoomCode.textContent = roomCode;
+                roomBadge.classList.remove('hidden');
+                startRoomListener(roomCode);
+
+            } catch (e) {
+                lobbyStatus.textContent = "Fehler beim Beitreten.";
+                console.error(e);
+            }
+        });
+
+        // --- REALTIME ROOM SYNC ---
+
+        function startRoomListener(code) {
+            if (roomUnsubscribe) roomUnsubscribe();
+
+            const roomRef = getRoomDocRef(code);
+            roomUnsubscribe = onSnapshot(roomRef, (snapshot) => {
+                if (!snapshot.exists()) return;
+                const data = snapshot.data();
+
+                // 1. Waiting for P2
+                if (data.status === 'waiting') {
+                    showScreen('waiting');
+                }
+
+                // 2. Ships Placement Phase
+                if (data.status === 'placement') {
+                    if (screens.placement.classList.contains('hidden')) {
+                        initPlacementBoard();
+                        showScreen('placement');
+                    }
+                }
+
+                // 3. Battle Phase
+                if (data.status === 'playing') {
+                    if (screens.battle.classList.contains('hidden')) {
+                        initBattleBoards();
+                        showScreen('battle');
+                    }
+                    updateBattleUI(data);
+                }
+
+                // 4. Game Over
+                if (data.status === 'finished') {
+                    updateBattleUI(data);
+                    showGameOverModal(data.winner);
+                }
+
+            }, (error) => {
+                console.error("Firestore Listener Error:", error);
+            });
+        }
+
+        // --- SHIP PLACEMENT LOGIC ---
+
+        function initPlacementBoard() {
+            const boardEl = document.getElementById('placement-board');
+            boardEl.innerHTML = '';
+            
+            // Header Row (Numbers 1-10)
+            boardEl.appendChild(createLabelCell(''));
+            for (let i = 1; i <= BOARD_SIZE; i++) {
+                boardEl.appendChild(createLabelCell(i.toString()));
+            }
+
+            // Grid Rows (A-J)
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                boardEl.appendChild(createLabelCell(LETTERS[r]));
+                for (let c = 1; c <= BOARD_SIZE; c++) {
+                    const coord = `${LETTERS[r]}${c}`;
+                    const cell = document.createElement('div');
+                    cell.className = 'cell bg-navy-900 border border-navy-700/60 rounded cursor-pointer hover:border-cyan-glow transition flex items-center justify-center';
+                    cell.dataset.coord = coord;
+
+                    cell.addEventListener('mouseenter', () => handleCellHover(coord));
+                    cell.addEventListener('mouseleave', clearHoverStates);
+                    cell.addEventListener('click', () => handleCellClick(coord));
+
+                    boardEl.appendChild(cell);
+                }
+            }
+
+            renderInventory();
+        }
+
+        function createLabelCell(text) {
+            const label = document.createElement('div');
+            label.className = 'cell font-mono text-xs text-slate-500 font-bold flex items-center justify-center';
+            label.textContent = text;
+            return label;
+        }
+
+        function renderInventory() {
+            const invEl = document.getElementById('ships-inventory');
+            invEl.innerHTML = '';
+
+            SHIPS_CONFIG.forEach(config => {
+                const remaining = shipCounts[config.id];
+                const item = document.createElement('button');
+                const isSelected = selectedShipToPlace && selectedShipToPlace.id === config.id;
+                
+                item.className = `px-3 py-2 rounded-lg border font-semibold flex items-center gap-2 transition ${
+                    remaining === 0 
+                        ? 'opacity-40 border-navy-700 bg-navy-900 cursor-not-allowed' 
+                        : isSelected 
+                            ? 'border-cyan-glow bg-cyan- glow/10 text-cyan-glow ring-2 ring-cyan-glow/30' 
+                            : 'border-navy-600 bg-navy-700 hover:border-slate-400 text-slate-200'
+                }`;
+
+                item.innerHTML = `
+                    <span>${config.name} (${config.size})</span>
+                    <span class="bg-navy-900 px-2 py-0.5 rounded text-xs font-mono text-cyan-glow">${remaining}x</span>
+                `;
+
+                if (remaining > 0) {
+                    item.onclick = () => {
+                        selectedShipToPlace = config;
+                        renderInventory();
+                    };
+                }
+
+                invEl.appendChild(item);
+            });
+
+            // Auto-select first available ship if none selected
+            if (!selectedShipToPlace || shipCounts[selectedShipToPlace.id] === 0) {
+                const firstAvailable = SHIPS_CONFIG.find(c => shipCounts[c.id] > 0);
+                selectedShipToPlace = firstAvailable || null;
+            }
+
+            // Check if all placed
+            const allPlaced = Object.values(shipCounts).every(cnt => cnt === 0);
+            const btnReady = document.getElementById('btn-ready');
+            btnReady.disabled = !allPlaced;
+            if (allPlaced) {
+                btnReady.className = "mt-6 w-full max-w-xs bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2 glow-active cursor-pointer";
+            } else {
+                btnReady.className = "mt-6 w-full max-w-xs bg-slate-700 text-slate-500 font-bold py-3 px-6 rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2 cursor-not-allowed";
+            }
+        }
+
+        document.getElementById('btn-rotate-ship').addEventListener('click', () => {
+            orientation = orientation === 'H' ? 'V' : 'H';
+            document.getElementById('current-orientation').textContent = orientation === 'H' ? 'Horiz.' : 'Vertik.';
+        });
+
+        function getShipCoordinates(startCoord, size, orient) {
+            const rowStr = startCoord[0];
+            const col = parseInt(startCoord.slice(1));
+            const rowIdx = LETTERS.indexOf(rowStr);
+            const coords = [];
+
+            for (let i = 0; i < size; i++) {
+                if (orient === 'H') {
+                    if (col + i > BOARD_SIZE) return null; // Overflows board
+                    coords.push(`${rowStr}${col + i}`);
+                } else {
+                    if (rowIdx + i >= BOARD_SIZE) return null; // Overflows board
+                    coords.push(`${LETTERS[rowIdx + i]}${col}`);
+                }
+            }
+            return coords;
+        }
+
+        function handleCellHover(coord) {
+            clearHoverStates();
+            if (!selectedShipToPlace) return;
+
+            const coords = getShipCoordinates(coord, selectedShipToPlace.size, orientation);
+            const isValid = coords && isValidPlacement(coords);
+
+            if (coords) {
+                coords.forEach(c => {
+                    const el = document.querySelector(`#placement-board [data-coord="${c}"]`);
+                    if (el) {
+                        el.classList.add(isValid ? 'bg-cyan-glow/30' : 'bg-rose-500/40');
+                    }
+                });
+            }
+        }
+
+        function clearHoverStates() {
+            document.querySelectorAll('#placement-board .cell').forEach(cell => {
+                cell.classList.remove('bg-cyan-glow/30', 'bg-rose-500/40');
+            });
+        }
+
+        function isValidPlacement(coords) {
+            // Check collision with already placed ships
+            return coords.every(c => !placedShips.some(s => s.coordinates.includes(c)));
+        }
+
+        function handleCellClick(coord) {
+            if (!selectedShipToPlace) return;
+
+            const coords = getShipCoordinates(coord, selectedShipToPlace.size, orientation);
+            if (coords && isValidPlacement(coords)) {
+                placedShips.push({
+                    id: selectedShipToPlace.id,
+                    name: selectedShipToPlace.name,
+                    size: selectedShipToPlace.size,
+                    coordinates: coords
+                });
+
+                shipCounts[selectedShipToPlace.id]--;
+                renderPlacedShips();
+                renderInventory();
+            }
+        }
+
+        function renderPlacedShips() {
+            // Clear ship visuals
+            document.querySelectorAll('#placement-board .cell').forEach(cell => {
+                if (cell.dataset.coord) {
+                    cell.innerHTML = '';
+                    cell.classList.remove('bg-cyan-600', 'border-cyan-400');
+                    cell.classList.add('bg-navy-900');
+                }
+            });
+
+            // Render current placed ships
+            placedShips.forEach(ship => {
+                ship.coordinates.forEach(coord => {
+                    const cell = document.querySelector(`#placement-board [data-coord="${coord}"]`);
+                    if (cell) {
+                        cell.classList.remove('bg-navy-900');
+                        cell.classList.add('bg-cyan-600', 'border-cyan-400');
+                    }
+                });
+            });
+        }
+
+        // Randomize placement
+        document.getElementById('btn-random-ships').addEventListener('click', () => {
+            placedShips = [];
+            shipCounts = { battleship: 1, cruiser: 2, destroyer: 3, submarine: 4 };
+
+            SHIPS_CONFIG.forEach(config => {
+                while (shipCounts[config.id] > 0) {
+                    let placed = false;
+                    let attempts = 0;
+                    while (!placed && attempts < 100) {
+                        attempts++;
+                        const r = LETTERS[Math.floor(Math.random() * BOARD_SIZE)];
+                        const c = Math.floor(Math.random() * BOARD_SIZE) + 1;
+                        const randOrient = Math.random() > 0.5 ? 'H' : 'V';
+                        const coords = getShipCoordinates(`${r}${c}`, config.size, randOrient);
+
+                        if (coords && isValidPlacement(coords)) {
+                            placedShips.push({
+                                id: config.id,
+                                name: config.name,
+                                size: config.size,
+                                coordinates: coords
+                            });
+                            shipCounts[config.id]--;
+                            placed = true;
+                        }
+                    }
+                }
+            });
+
+            renderPlacedShips();
+            renderInventory();
+        });
+
+        // Ready Button Event
+        document.getElementById('btn-ready').addEventListener('click', async () => {
+            const roomRef = getRoomDocRef(roomCode);
+            const docSnap = await getDoc(roomRef);
+            if (!docSnap.exists()) return;
+
+            const data = docSnap.data();
+            const myData = data[playerRole] || {};
+            myData.ready = true;
+            myData.ships = placedShips;
+
+            const updateObj = {};
+            updateObj[playerRole] = myData;
+
+            // Check if both are ready -> start game
+            const otherRole = playerRole === 'p1' ? 'p2' : 'p1';
+            if (data[otherRole] && data[otherRole].ready) {
+                updateObj.status = 'playing';
+                updateObj.logs = [...(data.logs || []), "Beide Kommandanten sind bereit! Feuer frei!"];
+            } else {
+                updateObj.logs = [...(data.logs || []), `${myData.name} ist gefechtsbereit.`];
+            }
+
+            await updateDoc(roomRef, updateObj);
+            document.getElementById('btn-ready').disabled = true;
+            document.getElementById('btn-ready').textContent = "Warte auf Gegner...";
+        });
+
+        // --- BATTLE LOGIC ---
+
+        function initBattleBoards() {
+            const ownBoardEl = document.getElementById('own-board');
+            const enemyBoardEl = document.getElementById('enemy-board');
+
+            ownBoardEl.innerHTML = '';
+            enemyBoardEl.innerHTML = '';
+
+            // Generate Labels & Grid Cells
+            [ownBoardEl, enemyBoardEl].forEach(board => {
+                board.appendChild(createLabelCell(''));
+                for (let i = 1; i <= BOARD_SIZE; i++) {
+                    board.appendChild(createLabelCell(i.toString()));
+                }
+            });
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                // Own board
+                ownBoardEl.appendChild(createLabelCell(LETTERS[r]));
+                for (let c = 1; c <= BOARD_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell bg-navy-900 border border-navy-700/60 rounded flex items-center justify-center text-xs';
+                    cell.dataset.coord = `${LETTERS[r]}${c}`;
+                    ownBoardEl.appendChild(cell);
+                }
+
+                // Enemy target board
+                enemyBoardEl.appendChild(createLabelCell(LETTERS[r]));
+                for (let c = 1; c <= BOARD_SIZE; c++) {
+                    const coord = `${LETTERS[r]}${c}`;
+                    const cell = document.createElement('div');
+                    cell.className = 'cell bg-navy-900 border border-navy-700/60 rounded cursor-pointer hover:border-rose-400 transition flex items-center justify-center text-xs';
+                    cell.dataset.coord = coord;
+                    cell.onclick = () => handleFireShot(coord);
+                    enemyBoardEl.appendChild(cell);
+                }
+            }
+
+            // Draw own ships initially
+            placedShips.forEach(ship => {
+                ship.coordinates.forEach(coord => {
+                    const cell = ownBoardEl.querySelector(`[data-coord="${coord}"]`);
+                    if (cell) {
+                        cell.classList.add('bg-cyan-700/80', 'border-cyan-500');
+                    }
+                });
+            });
+        }
+
+        async function handleFireShot(coord) {
+            const roomRef = getRoomDocRef(roomCode);
+            const docSnap = await getDoc(roomRef);
+            if (!docSnap.exists()) return;
+
+            const data = docSnap.data();
+
+            // Check if it's player's turn
+            if (data.turn !== playerRole) return;
+            if (data.status !== 'playing') return;
+
+            const enemyRole = playerRole === 'p1' ? 'p2' : 'p1';
+            const previousShots = data.shots?.[playerRole] || [];
+
+            // Prevent shooting same cell twice
+            if (previousShots.includes(coord)) return;
+
+            const updatedShots = [...previousShots, coord];
+            const enemyShips = data[enemyRole].ships || [];
+
+            // Check hit or miss
+            let isHit = false;
+            let hitShipName = null;
+            let isSunk = false;
+
+            enemyShips.forEach(ship => {
+                if (ship.coordinates.includes(coord)) {
+                    isHit = true;
+                    hitShipName = ship.name;
+
+                    // Check if ship is completely sunk
+                    const allShipHits = ship.coordinates.every(c => updatedShots.includes(c));
+                    if (allShipHits) isSunk = true;
+                }
+            });
+
+            // Update Firestore with shot results
+            const updateObj = {};
+            updateObj[`shots.${playerRole}`] = updatedShots;
+
+            let logMsg = `${data[playerRole].name} schießt auf ${coord}: ${isHit ? '💥 TREFFER!' : '🌊 Wasser'}`;
+            if (isSunk) logMsg += ` (${hitShipName} VERSENKT!)`;
+
+            updateObj.logs = [...(data.logs || []), logMsg];
+
+            // Turn switches only on miss or stays on hit (Standard Battleship Rules: Hit = Shoot again)
+            if (!isHit) {
+                updateObj.turn = enemyRole;
+            }
+
+            // Check Win Condition: All enemy ships sunk
+            const allEnemyCoords = enemyShips.flatMap(s => s.coordinates);
+            const hasWon = allEnemyCoords.every(c => updatedShots.includes(c));
+
+            if (hasWon) {
+                updateObj.status = 'finished';
+                updateObj.winner = playerRole;
+                updateObj.logs.push(`🏆 ${data[playerRole].name} HAT DAS GEFECHT GEWONNEN!`);
+            }
+
+            await updateDoc(roomRef, updateObj);
+        }
+
+        function updateBattleUI(data) {
+            const isMyTurn = data.turn === playerRole;
+            const enemyRole = playerRole === 'p1' ? 'p2' : 'p1';
+
+            // 1. Update Turn Banner
+            const turnBanner = document.getElementById('turn-banner');
+            const turnText = document.getElementById('turn-text');
+            const turnIcon = document.getElementById('turn-icon');
+
+            if (data.status === 'finished') {
+                turnBanner.className = "w-full mb-6 py-3 px-4 rounded-xl text-center font-bold text-lg bg-navy-800 border-navy-600 text-slate-300";
+                turnText.textContent = "Gefecht Beendet";
+                turnIcon.className = "fa-solid fa-flag-checkered";
+            } else if (isMyTurn) {
+                turnBanner.className = "w-full mb-6 py-3 px-4 rounded-xl text-center font-bold text-lg bg-emerald-950/80 border-emerald-500 text-emerald-400 glow-active";
+                turnText.textContent = "DU BIST AM ZUG! Ziel auswählen...";
+                turnIcon.className = "fa-solid fa-crosshairs animate-spin";
+            } else {
+                turnBanner.className = "w-full mb-6 py-3 px-4 rounded-xl text-center font-bold text-lg bg-navy-800 border-navy-700 text-slate-400";
+                turnText.textContent = "Gegner ist am Zug...";
+                turnIcon.className = "fa-solid fa-hourglass-half animate-pulse";
+            }
+
+            // 2. Render Enemy Target Board (My Shots)
+            const myShots = data.shots?.[playerRole] || [];
+            const enemyShips = data[enemyRole]?.ships || [];
+
+            myShots.forEach(coord => {
+                const cell = document.querySelector(`#enemy-board [data-coord="${coord}"]`);
+                if (cell) {
+                    const isHit = enemyShips.some(s => s.coordinates.includes(coord));
+                    cell.innerHTML = isHit ? '<i class="fa-solid fa-fire text-rose-500 text-base"></i>' : '<i class="fa-solid fa-droplet text-blue-400 text-xs"></i>';
+                    cell.className = `cell border rounded flex items-center justify-center text-xs ${isHit ? 'bg-rose-950/60 border-rose-600' : 'bg-navy-950 border-navy-800'}`;
+                    cell.onclick = null; // Disable clicking spent cells
+                }
+            });
+
+            // 3. Render Own Board (Enemy Shots on my fleet)
+            const enemyShots = data.shots?.[enemyRole] || [];
+            const myShips = data[playerRole]?.ships || [];
+
+            enemyShots.forEach(coord => {
+                const cell = document.querySelector(`#own-board [data-coord="${coord}"]`);
+                if (cell) {
+                    const isHit = myShips.some(s => s.coordinates.includes(coord));
+                    cell.innerHTML = isHit ? '<i class="fa-solid fa-explosion text-amber-400 text-base"></i>' : '<i class="fa-solid fa-xmark text-slate-600 text-xs"></i>';
+                    if (isHit) {
+                        cell.className = 'cell border border-rose-500 bg-rose-900/80 rounded flex items-center justify-center';
+                    }
+                }
+            });
+
+            // 4. Update Logs
+            const logContainer = document.getElementById('combat-log');
+            if (data.logs && data.logs.length > 0) {
+                logContainer.innerHTML = data.logs.slice(-10).reverse().map(log => `<p class="border-b border-navy-700/50 pb-0.5">${log}</p>`).join('');
+            }
+        }
+
+        function showGameOverModal(winnerRole) {
+            const modal = document.getElementById('modal-gameover');
+            const title = document.getElementById('gameover-title');
+            const desc = document.getElementById('gameover-desc');
+            const iconContainer = document.getElementById('gameover-icon-container');
+
+            const isWinner = winnerRole === playerRole;
+
+            if (isWinner) {
+                title.textContent = "SIEG!";
+                title.className = "text-3xl font-black mb-2 text-emerald-400";
+                desc.textContent = "Ausgezeichnete Taktik, Admiral! Die feindliche Flotte wurde vollständig vernichtet.";
+                iconContainer.innerHTML = '<i class="fa-solid fa-trophy text-6xl text-amber-400 animate-bounce"></i>';
+            } else {
+                title.textContent = "NIEDERLAGE!";
+                title.className = "text-3xl font-black mb-2 text-rose-500";
+                desc.textContent = "Eure Flotte wurde zerstört. Das Hauptquartier befiehlt den Rückzug!";
+                iconContainer.innerHTML = '<i class="fa-solid fa-skull-crossbones text-6xl text-rose-500"></i>';
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            location.reload();
+        });
+
+    </script>
+</body>
+</html>
+```
