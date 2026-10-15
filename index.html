@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schiffe Versenken - Multiplayer</title>
-    <!-- PeerJS für die Online-Verbindung zwischen Handys -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -192,19 +191,75 @@
             color: var(--text-muted);
         }
 
-        .log {
+        /* CHAT-BEREICH */
+        .chat-container {
             background: var(--panel-bg);
             border: 1px solid var(--border);
             border-radius: 8px;
             padding: 10px;
-            font-size: 0.85rem;
-            height: 80px;
-            overflow-y: auto;
             width: 100%;
             max-width: 450px;
             margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .chat-messages {
+            height: 90px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 0.85rem;
             text-align: left;
-            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .chat-input-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .chat-input-row input {
+            margin: 0;
+            font-size: 0.9rem;
+            padding: 8px;
+            letter-spacing: normal;
+            text-align: left;
+        }
+
+        .chat-input-row button {
+            width: 80px;
+            margin: 0;
+            padding: 8px;
+            font-size: 0.9rem;
+        }
+
+        /* GROSSES BANNER FÜR VERSENKT */
+        #sunk-banner {
+            position: fixed;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            background: var(--danger);
+            color: white;
+            font-size: 1.8rem;
+            font-weight: bold;
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            z-index: 999;
+            text-align: center;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+            border: 3px solid white;
+        }
+
+        #sunk-banner.show {
+            transform: translate(-50%, -50%) scale(1);
         }
 
         .fleet-setup-bar {
@@ -226,10 +281,13 @@
 </head>
 <body>
 
+    <!-- Pop-Up Banner für Versenkt -->
+    <div id="sunk-banner">SCHIFF VERSENKT!</div>
+
     <h1>Schiffe Versenken</h1>
 
     <div id="menu-screen" class="card">
-        <p style="margin-bottom: 15px; color: var(--text-muted);">Gib einen 4-stelligen Raumcode ein (z.B. 1234), um ein Spiel zu starten oder beizutreten.</p>
+        <p style="margin-bottom: 15px; color: var(--text-muted);">Gib einen 4-stelligen Raum code ein (z.B. 1234), um ein Spiel zu starten oder beizutreten.</p>
         <input type="text" id="room-code-input" maxlength="6" placeholder="z.B. 4711">
         <button id="create-btn" class="accent">Raum erstellen</button>
         <button id="join-btn" class="secondary">Raum beitreten</button>
@@ -271,7 +329,17 @@
             </div>
         </div>
 
-        <div id="game-log" class="log">Spiel gestartet. Viel Erfolg!</div>
+        <!-- Chat statt Log -->
+        <div class="chat-container">
+            <div class="board-title" style="text-align: left; margin:0;">Chat</div>
+            <div id="chat-messages" class="chat-messages">
+                <div style="color: var(--text-muted); font-style: italic;">Spiel beigetreten. Schreibt euch etwas!</div>
+            </div>
+            <div class="chat-input-row">
+                <input type="text" id="chat-input" placeholder="Nachricht...">
+                <button id="chat-send-btn">Senden</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -308,13 +376,23 @@
             clearBtn: document.getElementById('clear-btn'),
             startBtn: document.getElementById('start-game-btn'),
             turnIndicator: document.getElementById('turn-indicator'),
-            gameLog: document.getElementById('game-log'),
-            shipStatusText: document.getElementById('ship-status-text')
+            shipStatusText: document.getElementById('ship-status-text'),
+            chatMessages: document.getElementById('chat-messages'),
+            chatInput: document.getElementById('chat-input'),
+            chatSendBtn: document.getElementById('chat-send-btn'),
+            sunkBanner: document.getElementById('sunk-banner')
         };
 
         function showStatus(text) {
             ui.menuStatus.textContent = text;
             ui.menuStatus.classList.remove('hidden');
+        }
+
+        function triggerSunkBanner() {
+            ui.sunkBanner.classList.add('show');
+            setTimeout(() => {
+                ui.sunkBanner.classList.remove('show');
+            }, 2000);
         }
 
         function createGridElements(container, isEnemy) {
@@ -572,12 +650,14 @@
                 if(iAmReady) {
                     startGame();
                 } else {
-                    logMessage("Gegner ist bereit!");
+                    addChatMessage("System", "Gegner ist bereit!");
                 }
             } else if(data.type === 'SHOT') {
                 receiveShot(data.r, data.c);
             } else if(data.type === 'SHOT_RESULT') {
                 handleShotResult(data.r, data.c, data.hit, data.sunk, data.gameOver);
+            } else if(data.type === 'CHAT') {
+                addChatMessage("Gegner", data.msg);
             }
         }
 
@@ -591,7 +671,7 @@
             gameActive = true;
             myTurn = isHost;
             updateTurnIndicator();
-            logMessage("Spiel gestartet! " + (myTurn ? "Du beginnst." : "Gegner beginnt."));
+            addChatMessage("System", "Spiel gestartet! " + (myTurn ? "Du beginnst." : "Gegner beginnt."));
         }
 
         function drawPlayerBoardInGame() {
@@ -682,12 +762,12 @@
                 gameActive = false;
                 ui.turnIndicator.textContent = "Niederlage! Alle Schiffe versenkt.";
                 ui.turnIndicator.style.color = "var(--danger)";
-                logMessage("Du hast verloren!");
+                addChatMessage("System", "Du hast verloren!");
             } else {
                 myTurn = true;
                 updateTurnIndicator();
                 let msg = `Gegner schoss auf ${letters[r]}${c+1}: ${hit ? (sunk ? 'Treffer & Schiff versenkt!' : 'Treffer!') : 'Vorbei.'}`;
-                logMessage(msg);
+                addChatMessage("System", msg);
             }
         }
 
@@ -695,11 +775,15 @@
             myShots[r][c] = hit ? 2 : 1;
             drawEnemyBoardInGame();
 
+            if(sunk) {
+                triggerSunkBanner();
+            }
+
             if(gameOver) {
                 gameActive = false;
                 ui.turnIndicator.textContent = "Sieg! Du hast gewonnen!";
                 ui.turnIndicator.style.color = "var(--accent)";
-                logMessage("Sieg! Du hast gewonnen!");
+                addChatMessage("System", "Sieg! Du hast gewonnen!");
             } else {
                 if(!hit) {
                     myTurn = false;
@@ -708,8 +792,8 @@
                     myTurn = true;
                     updateTurnIndicator();
                 }
-                let msg = `Dein Schuss auf ${letters[r]}${c+1}: ${hit ? (sunk ? 'TREFFER & SCHIFF VERSENKT! Du darfst nochmal.' : 'Treffer! Du darfst nochmal.') : 'Vorbei.'}`;
-                logMessage(msg);
+                let msg = `Dein Schuss auf ${letters[r]}${c+1}: ${hit ? (sunk ? 'TREFFER & SCHIFF VERSENKT!' : 'Treffer!') : 'Vorbei.'}`;
+                addChatMessage("System", msg);
             }
         }
 
@@ -733,10 +817,26 @@
             }
         }
 
-        function logMessage(msg) {
-            ui.gameLog.innerHTML += `<div>> ${msg}</div>`;
-            ui.gameLog.scrollTop = ui.gameLog.scrollHeight;
+        // Chat Logik
+        function addChatMessage(sender, text) {
+            const div = document.createElement('div');
+            div.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            ui.chatMessages.appendChild(div);
+            ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight;
         }
+
+        function sendChat() {
+            const text = ui.chatInput.value.trim();
+            if(!text || !conn) return;
+            addChatMessage("Du", text);
+            conn.send({ type: 'CHAT', msg: text });
+            ui.chatInput.value = '';
+        }
+
+        ui.chatSendBtn.addEventListener('click', sendChat);
+        ui.chatInput.addEventListener('keypress', (e) => {
+            if(e.key === 'Enter') sendChat();
+        });
     </script>
 </body>
 </html>
